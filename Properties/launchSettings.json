@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Mechanical Keyboard (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Mechanical Keyboard (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
