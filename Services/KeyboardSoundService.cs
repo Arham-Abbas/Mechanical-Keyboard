@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Mechanical_Keyboard.Models;
@@ -11,13 +12,16 @@ namespace Mechanical_Keyboard.Services
     {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
+        private const int WM_KEYUP = 0x0101;
         private const int WM_SYSKEYDOWN = 0x0104;
+        private const int WM_SYSKEYUP = 0x0105;
 
         private IntPtr _hookID = IntPtr.Zero;
         private readonly LowLevelKeyboardProc? _proc;
         private bool _isRunning;
         private bool _isEnabled;
         private readonly CachedSound? _cachedSound;
+        private readonly ConcurrentDictionary<int, bool> _keyStates = new();
 
         // High-performance, single-threaded audio engine
         private readonly WaveOutEvent? _playbackDevice;
@@ -51,10 +55,9 @@ namespace Mechanical_Keyboard.Services
             }
             _proc = HookCallback;
 
-            // Initialize the audio engine ONLY if a sound was successfully loaded.
             if (_cachedSound != null)
             {
-                _playbackDevice = new WaveOutEvent { DesiredLatency = 100 };
+                _playbackDevice = new WaveOutEvent { DesiredLatency = 80, NumberOfBuffers = 2 };
                 _mixer = new MixingSampleProvider(_cachedSound.WaveFormat) { ReadFully = true };
                 _playbackDevice.Init(_mixer);
                 _playbackDevice.Play();
@@ -72,6 +75,7 @@ namespace Mechanical_Keyboard.Services
         {
             if (!_isRunning) return;
             UnhookWindowsHookEx(_hookID);
+            _keyStates.Clear();
             _isRunning = false;
         }
 
@@ -89,14 +93,21 @@ namespace Mechanical_Keyboard.Services
                 if (nCode >= 0)
                 {
                     var kbdStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                    var vkCode = kbdStruct.vkCode;
                     var wParamValue = wParam.ToInt32();
 
-                    bool isKeyDown = (wParamValue == WM_KEYDOWN || wParamValue == WM_SYSKEYDOWN);
-                    bool isKeyRepeat = (kbdStruct.flags & 0x80) != 0;
-
-                    if (isKeyDown && !isKeyRepeat)
+                    if (wParamValue == WM_KEYDOWN || wParamValue == WM_SYSKEYDOWN)
                     {
-                        PlaySound();
+                        // If TryAdd succeeds, the key was not previously down. This is the initial press.
+                        if (_keyStates.TryAdd(vkCode, true))
+                        {
+                            PlaySound();
+                        }
+                    }
+                    else if (wParamValue == WM_KEYUP || wParamValue == WM_SYSKEYUP)
+                    {
+                        // When the key is released, remove it from the dictionary.
+                        _keyStates.TryRemove(vkCode, out _);
                     }
                 }
             }
@@ -147,11 +158,9 @@ namespace Mechanical_Keyboard.Services
         private static partial IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
     }
 
-    // A helper class to turn our cached sound into a playable ISampleProvider
     public class CachedSoundSampleProvider(CachedSound cachedSound) : ISampleProvider
     {
         private long _position;
-
         public WaveFormat WaveFormat => cachedSound.WaveFormat;
 
         public int Read(float[] buffer, int offset, int count)
