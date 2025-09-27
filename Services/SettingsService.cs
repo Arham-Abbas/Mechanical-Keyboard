@@ -13,7 +13,7 @@ namespace Mechanical_Keyboard.Services
         public SettingsService()
         {
             var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var appFolderPath = Path.Combine(appDataPath, "MechanicalKeyboardEmulator");
+            var appFolderPath = Path.Combine(appDataPath, "Mechanical Keyboard");
             Directory.CreateDirectory(appFolderPath); // Ensure the directory exists
             _settingsFilePath = Path.Combine(appFolderPath, "settings.json");
             CurrentSettings = LoadSettings();
@@ -28,7 +28,7 @@ namespace Mechanical_Keyboard.Services
                     SoundFilePath = Path.Combine(AppContext.BaseDirectory, "Assets", "key-press.wav")
                 };
                 SaveSettings(defaultSettings);
-                return defaultSettings; // Corrected: Return the settings that were just saved.
+                return defaultSettings;
             }
 
             try

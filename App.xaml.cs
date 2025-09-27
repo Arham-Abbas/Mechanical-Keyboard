@@ -1,22 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Mechanical_Keyboard.Services;
+﻿using Mechanical_Keyboard.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
-using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
+using Microsoft.UI.Xaml.Media.Imaging;
+using System;
+using System.Threading.Tasks;
 using H.NotifyIcon;
+using Microsoft.UI.Dispatching; // Required for DispatcherQueue
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -31,6 +20,8 @@ namespace Mechanical_Keyboard
         private Window? _window;
         private KeyboardSoundService? _keyboardSoundService;
         private TaskbarIcon? _trayIcon;
+        private SettingsService? _settingsService;
+        private DispatcherQueue? _dispatcherQueue;
 
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
@@ -45,18 +36,54 @@ namespace Mechanical_Keyboard
         /// Invoked when the application is launched.
         /// </summary>
         /// <param name="args">Details about the launch request and process.</param>
-        protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
             _window = new MainWindow();
-            _window.Activate();
+            _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
-            // Initialize and start the keyboard sound service
-            var soundPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "key-press.wav");
-            _keyboardSoundService = new KeyboardSoundService(soundPath);
-            _keyboardSoundService.Start();
+            InitializeTrayIcon();
+            await InitializeServicesAsync();
+        }
 
-            // Get the tray icon from resources
-            _trayIcon = (TaskbarIcon)Resources["TrayIcon"];
+        private async Task InitializeServicesAsync()
+        {
+            // Create services on a background thread to avoid blocking the UI
+            await Task.Run(() =>
+            {
+                _settingsService = new SettingsService();
+                _keyboardSoundService = new KeyboardSoundService(_settingsService.CurrentSettings.SoundFilePath);
+            });
+
+            // Enable the hook on the UI thread to prevent deadlocks
+            if (_keyboardSoundService != null && _dispatcherQueue != null)
+            {
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    _keyboardSoundService.IsEnabled = _settingsService!.CurrentSettings.IsEnabled;
+                });
+            }
+        }
+
+        private void InitializeTrayIcon()
+        {
+            _trayIcon = new TaskbarIcon
+            {
+                ToolTipText = "Mechanical Keyboard",
+                IconSource = new BitmapImage(new Uri("ms-appx:///Assets/TrayIcon.ico"))
+            };
+
+            var menu = new MenuFlyout();
+            var settingsItem = new MenuFlyoutItem { Text = "Settings" };
+            settingsItem.Click += TrayIcon_Settings_Click;
+            var exitItem = new MenuFlyoutItem { Text = "Exit" };
+            exitItem.Click += TrayIcon_Exit_Click;
+
+            menu.Items.Add(settingsItem);
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(exitItem);
+
+            _trayIcon.ContextFlyout = menu;
+            _trayIcon.ForceCreate();
         }
 
         private void TrayIcon_Settings_Click(object sender, RoutedEventArgs e)

@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Media;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
+using Mechanical_Keyboard.Models;
+using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 
 namespace Mechanical_Keyboard.Services
 {
@@ -10,94 +11,159 @@ namespace Mechanical_Keyboard.Services
     {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
+        private const int WM_SYSKEYDOWN = 0x0104;
 
         private IntPtr _hookID = IntPtr.Zero;
-        private LowLevelKeyboardProc? _proc;
-        private readonly string? _soundFilePath;
+        private readonly LowLevelKeyboardProc? _proc;
         private bool _isRunning;
+        private bool _isEnabled;
+        private readonly CachedSound? _cachedSound;
 
-        // Delegate for the hook procedure
+        // High-performance, single-threaded audio engine
+        private readonly WaveOutEvent? _playbackDevice;
+        private readonly MixingSampleProvider? _mixer;
+
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set
+            {
+                if (_isEnabled == value) return;
+                _isEnabled = value;
+                if (_isEnabled) Start(); else Stop();
+            }
+        }
+
         private unsafe delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
         public KeyboardSoundService(string? soundFilePath)
         {
-            _soundFilePath = soundFilePath;
+            if (!string.IsNullOrEmpty(soundFilePath))
+            {
+                try
+                {
+                    _cachedSound = new CachedSound(soundFilePath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ERROR] Failed to load sound file: {ex.Message}");
+                }
+            }
             _proc = HookCallback;
+
+            // Initialize the audio engine ONLY if a sound was successfully loaded.
+            if (_cachedSound != null)
+            {
+                _playbackDevice = new WaveOutEvent { DesiredLatency = 100 };
+                _mixer = new MixingSampleProvider(_cachedSound.WaveFormat) { ReadFully = true };
+                _playbackDevice.Init(_mixer);
+                _playbackDevice.Play();
+            }
         }
 
-        public void Start()
+        private void Start()
         {
-            if (_isRunning) return;
-            _hookID = SetHook(_proc!);
+            if (_isRunning || _proc == null) return;
+            _hookID = SetHook(_proc);
             _isRunning = true;
         }
 
-        public void Stop()
+        private void Stop()
         {
             if (!_isRunning) return;
             UnhookWindowsHookEx(_hookID);
             _isRunning = false;
         }
 
-        private IntPtr SetHook(LowLevelKeyboardProc proc)
+        private static IntPtr SetHook(LowLevelKeyboardProc proc)
         {
             using var curProcess = Process.GetCurrentProcess();
             using var curModule = curProcess.MainModule!;
-            return SetWindowsHookEx(WH_KEYBOARD_LL, proc,
-                GetModuleHandle(curModule.ModuleName), 0);
+            return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
         }
 
         private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && wParam.ToInt32() == WM_KEYDOWN)
+            try
             {
-                _ = PlaySoundAsync();
+                if (nCode >= 0)
+                {
+                    var kbdStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                    var wParamValue = wParam.ToInt32();
+
+                    bool isKeyDown = (wParamValue == WM_KEYDOWN || wParamValue == WM_SYSKEYDOWN);
+                    bool isKeyRepeat = (kbdStruct.flags & 0x80) != 0;
+
+                    if (isKeyDown && !isKeyRepeat)
+                    {
+                        PlaySound();
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FATAL] Unhandled exception in keyboard hook: {ex}");
+            }
+            
             return CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
 
-        private async Task PlaySoundAsync()
+        private void PlaySound()
         {
-            if (string.IsNullOrEmpty(_soundFilePath)) return;
-            await Task.Run(() =>
-            {
-                try
-                {
-                    using var player = new SoundPlayer(_soundFilePath);
-                    player.PlaySync();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error playing sound: {ex.Message}");
-                }
+            if (_cachedSound == null || _mixer == null) return;
 
-                return Task.CompletedTask;
-            });
+            var soundSampleProvider = new CachedSoundSampleProvider(_cachedSound);
+            _mixer.AddMixerInput(soundSampleProvider);
         }
 
         public void Dispose()
         {
             Stop();
+            _playbackDevice?.Dispose();
             GC.SuppressFinalize(this);
         }
 
-        // LibraryImport declarations for best performance (requires .NET 8+ and unsafe code enabled)
-        [LibraryImport("user32.dll", SetLastError = true)]
-        private static partial IntPtr SetWindowsHookEx(
-            int idHook,
-            LowLevelKeyboardProc lpfn,
-            IntPtr hMod,
-            uint dwThreadId);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KBDLLHOOKSTRUCT
+        {
+            public int vkCode;
+            public int scanCode;
+            public int flags;
+            public int time;
+            public IntPtr dwExtraInfo;
+        }
 
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+        private static partial IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [LibraryImport("user32.dll", EntryPoint = "UnhookWindowsHookEx", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static partial bool UnhookWindowsHookEx(IntPtr hhk);
 
-        [LibraryImport("user32.dll", SetLastError = true)]
-        private static partial IntPtr CallNextHookEx(
-            IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+        [LibraryImport("user32.dll", EntryPoint = "CallNextHookEx", SetLastError = true)]
+        private static partial IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
-        [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         private static partial IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
+    }
+
+    // A helper class to turn our cached sound into a playable ISampleProvider
+    public class CachedSoundSampleProvider(CachedSound cachedSound) : ISampleProvider
+    {
+        private long _position;
+
+        public WaveFormat WaveFormat => cachedSound.WaveFormat;
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            var availableSamples = cachedSound.AudioData.Length - _position;
+            var samplesToCopy = Math.Min(availableSamples, count);
+            if (samplesToCopy > 0)
+            {
+                Array.Copy(cachedSound.AudioData, _position, buffer, offset, samplesToCopy);
+                _position += samplesToCopy;
+            }
+            return (int)samplesToCopy;
+        }
     }
 }
