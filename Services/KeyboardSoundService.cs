@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Mechanical_Keyboard.Models;
 using NAudio.Wave;
@@ -8,7 +10,7 @@ using NAudio.Wave.SampleProviders;
 
 namespace Mechanical_Keyboard.Services
 {
-    public partial class KeyboardSoundService : IDisposable
+    public partial class KeyboardSoundService : IDisposable, INotifyPropertyChanged
     {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
@@ -21,11 +23,33 @@ namespace Mechanical_Keyboard.Services
         private bool _isRunning;
         private bool _isEnabled;
         private readonly CachedSound? _cachedSound;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            // Ensure the event is raised on the UI thread for UI updates
+            App.DispatcherQueue?.TryEnqueue(() =>
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName))
+            );
+        }
+
         private readonly ConcurrentDictionary<int, bool> _keyStates = new();
 
-        // High-performance, single-threaded audio engine
         private readonly WaveOutEvent? _playbackDevice;
         private readonly MixingSampleProvider? _mixer;
+        // Add a VolumeSampleProvider to control the master volume
+        private readonly VolumeSampleProvider? _volumeProvider;
+
+        public double Volume
+        {
+            get => _volumeProvider?.Volume ?? 1.0f;
+            set
+            {
+                // Volume is a float from 0.0 to 1.0 (or higher for amplification)
+                _volumeProvider?.Volume = (float)Math.Clamp(value, 0.0, 2.0);
+            }
+        }
 
         public bool IsEnabled
         {
@@ -35,6 +59,7 @@ namespace Mechanical_Keyboard.Services
                 if (_isEnabled == value) return;
                 _isEnabled = value;
                 if (_isEnabled) Start(); else Stop();
+                OnPropertyChanged(nameof(IsEnabled));
             }
         }
 
@@ -59,7 +84,16 @@ namespace Mechanical_Keyboard.Services
             {
                 _playbackDevice = new WaveOutEvent { DesiredLatency = 80, NumberOfBuffers = 2 };
                 _mixer = new MixingSampleProvider(_cachedSound.WaveFormat) { ReadFully = true };
-                _playbackDevice.Init(_mixer);
+                
+                // Create the volume provider and chain it to the mixer
+                _volumeProvider = new VolumeSampleProvider(_mixer);
+
+                // Set initial volume from settings
+                var settings = new SettingsService();
+                Volume = settings.CurrentSettings.Volume;
+                _volumeProvider.Volume = (float)(settings.CurrentSettings.Volume / 100.0);
+                // Initialize the playback device with the volume provider
+                _playbackDevice.Init(_volumeProvider);
                 _playbackDevice.Play();
             }
         }

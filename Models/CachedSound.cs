@@ -1,5 +1,4 @@
 ﻿using NAudio.Wave;
-using System;
 using System.IO;
 
 namespace Mechanical_Keyboard.Models

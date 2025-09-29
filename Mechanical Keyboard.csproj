@@ -76,6 +76,9 @@
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <NeutralLanguage>en-IN</NeutralLanguage>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <DefaultLanguage>en-IN</DefaultLanguage>
+    <PackageCertificateThumbprint>54EA202A49B356A43C1174301C39FB01AE21F733</PackageCertificateThumbprint>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
