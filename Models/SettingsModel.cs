@@ -10,10 +10,6 @@ namespace Mechanical_Keyboard.Models
         public string? SoundFilePath { get; set; }
     }
 
-    /// <summary>
-    /// Enables the JSON source generator for SettingsModel.
-    /// This improves performance and makes the app compatible with AOT compilation.
-    /// </summary>
     [JsonSerializable(typeof(SettingsModel))]
     internal partial class SettingsJsonContext : JsonSerializerContext
     {

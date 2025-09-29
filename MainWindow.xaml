@@ -28,7 +28,7 @@
                         PaneDisplayMode="Left"
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="False"
-                        Header="General">
+                        ItemInvoked="NavView_ItemInvoked">
             <NavigationView.MenuItems>
                 <!-- Give the General item a name -->
                 <NavigationViewItem x:Name="GeneralNavItem" Content="General" Tag="GeneralPage" Icon="Setting"/>
@@ -37,26 +37,8 @@
                 <NavigationViewItem Content="About" Tag="AboutPage" Icon="Help"/>
             </NavigationView.MenuItems>
 
-            <!-- The Frame will host our different settings pages -->
-            <Frame x:Name="ContentFrame">
-                <!-- Main Settings Content -->
-                <Grid>
-                    <StackPanel Margin="24" Spacing="8" MaxWidth="600" HorizontalAlignment="Left">
-                        <ToggleSwitch x:Name="EnableToggle"
-                                      Header="Enable Mechanical Keyboard"
-                                      IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}"/>
-                        
-                        <!-- The Volume Slider, with a reasonable size and enabled state -->
-                        <Slider Header="Volume"
-                                Value="{x:Bind ViewModel.Volume, Mode=TwoWay}"
-                                Minimum="0"
-                                Maximum="100"
-                                StepFrequency="1"
-                                Margin="0,16,0,0"
-                                IsEnabled="{x:Bind EnableToggle.IsOn, Mode=OneWay}"/>
-                    </StackPanel>
-                </Grid>
-            </Frame>
+            <!-- The Frame is now empty, ready to host our pages -->
+            <Frame x:Name="ContentFrame" />
         </NavigationView>
     </Grid>
 </Window>

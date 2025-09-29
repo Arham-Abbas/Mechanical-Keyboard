@@ -15,6 +15,9 @@
   <ItemGroup>
     <None Remove="Assets\key-press.wav" />
     <None Remove="Assets\TrayIcon.ico" />
+    <None Remove="Views\AboutPage.xaml" />
+    <None Remove="Views\GeneralPage.xaml" />
+    <None Remove="Views\SoundPacksPage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -53,6 +56,21 @@
     <Content Update="Assets\TrayIcon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\AboutPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\SoundPacksPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\GeneralPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
   <!--

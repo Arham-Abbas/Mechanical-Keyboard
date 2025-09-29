@@ -11,6 +11,7 @@ using Microsoft.UI.Dispatching;
 using Mechanical_Keyboard.Helpers;
 using Windows.ApplicationModel;
 using Microsoft.UI.Xaml.Media.Imaging;
+using WinRT.Interop;
 
 namespace Mechanical_Keyboard
 {
@@ -19,9 +20,8 @@ namespace Mechanical_Keyboard
         private Window? _window;
         private bool _handleWindowClosed = true;
         private ToggleMenuFlyoutItem? _toggleEnabledMenuItem;
-        private TaskbarIcon? _trayIcon; // Store as a field to allow for proper disposal
+        private TaskbarIcon? _trayIcon;
 
-        // Public, static properties to act as singletons for the services
         public static KeyboardSoundService? KeyboardSoundService { get; private set; }
         public static SettingsService? SettingsService { get; private set; }
         public static DispatcherQueue? DispatcherQueue { get; private set; }
@@ -93,16 +93,18 @@ namespace Mechanical_Keyboard
             await Task.Run(() =>
             {
                 SettingsService = new SettingsService();
-                KeyboardSoundService = new KeyboardSoundService(SettingsService.CurrentSettings.SoundFilePath);
+                // Subscribe to the event BEFORE creating the sound service
+                SettingsService.SoundPackChanged += OnSoundPackChanged;
+                
+                var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
+                KeyboardSoundService = new KeyboardSoundService(soundPackDir);
             });
 
-            if (KeyboardSoundService != null && DispatcherQueue != null)
+            if (KeyboardSoundService != null)
             {
-                // Subscribe to the service's PropertyChanged event to keep the UI in sync.
                 KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
 
-                // Set the initial state on the UI thread.
-                DispatcherQueue.TryEnqueue(() =>
+                DispatcherQueue?.TryEnqueue(() =>
                 {
                     if (KeyboardSoundService != null && _toggleEnabledMenuItem != null)
                     {
@@ -113,10 +115,17 @@ namespace Mechanical_Keyboard
             }
         }
 
+        private async void OnSoundPackChanged(object? sender, EventArgs e)
+        {
+            // This method is called when the user selects a new sound pack
+            if (KeyboardSoundService != null)
+            {
+                await KeyboardSoundService.ReloadSoundPackAsync(SettingsService!.CurrentSettings.SoundPackName);
+            }
+        }
+
         private void KeyboardSoundService_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // This event is raised by the service whenever its state changes.
-            // Update the tray icon's checkmark here.
             if (e.PropertyName == nameof(KeyboardSoundService.IsEnabled) && _toggleEnabledMenuItem != null)
             {
                 _toggleEnabledMenuItem.IsChecked = KeyboardSoundService!.IsEnabled;
@@ -144,11 +153,15 @@ namespace Mechanical_Keyboard
 
         private void ToggleEnabledCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
         {
-            // This command's ONLY responsibility is to change the state in the service.
-            if (KeyboardSoundService == null) return;
-            
-            // The service will then raise the PropertyChanged event, which updates all UI.
+            if (KeyboardSoundService == null || SettingsService == null) return;
+
+            // 1. Change the state in the service. This will trigger the PropertyChanged event
+            //    which updates all listening UI elements (the tray icon and the main window).
             KeyboardSoundService.IsEnabled = !KeyboardSoundService.IsEnabled;
+
+            // 2. Save the new state to the settings file to ensure it persists.
+            SettingsService.CurrentSettings.IsEnabled = KeyboardSoundService.IsEnabled;
+            SettingsService.SaveSettings(SettingsService.CurrentSettings);
         }
 
         private void ExitApplicationCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
@@ -156,7 +169,7 @@ namespace Mechanical_Keyboard
             _handleWindowClosed = false;
             
             KeyboardSoundService?.Dispose();
-            _trayIcon?.Dispose(); // Now correctly disposes the tray icon.
+            _trayIcon?.Dispose();
             
             _window?.Close();
 
@@ -174,6 +187,15 @@ namespace Mechanical_Keyboard
             {
                 await startupTask.RequestEnableAsync();
             }
+        }
+
+        public static IntPtr GetMainWindowHandle()
+        {
+            if (Current is App app && app._window != null)
+            {
+                return WindowNative.GetWindowHandle(app._window);
+            }
+            return IntPtr.Zero;
         }
     }
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Mechanical_Keyboard.Views.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <TextBlock Text="About Page - Coming Soon!" 
+                   Style="{StaticResource TitleTextBlockStyle}"
+                   Margin="24"/>
+    </Grid>
+</Page>

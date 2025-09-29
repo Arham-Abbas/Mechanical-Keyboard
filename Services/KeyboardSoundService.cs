@@ -1,9 +1,13 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Mechanical_Keyboard.Models;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -22,31 +26,23 @@ namespace Mechanical_Keyboard.Services
         private readonly LowLevelKeyboardProc? _proc;
         private bool _isRunning;
         private bool _isEnabled;
-        private readonly CachedSound? _cachedSound;
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            // Ensure the event is raised on the UI thread for UI updates
-            App.DispatcherQueue?.TryEnqueue(() =>
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName))
-            );
-        }
 
         private readonly ConcurrentDictionary<int, bool> _keyStates = new();
 
         private readonly WaveOutEvent? _playbackDevice;
         private readonly MixingSampleProvider? _mixer;
-        // Add a VolumeSampleProvider to control the master volume
         private readonly VolumeSampleProvider? _volumeProvider;
+
+        private readonly Dictionary<int, SoundVariantPool> _soundMap = [];
+        private readonly Random _random = new();
+
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         public double Volume
         {
             get => _volumeProvider?.Volume ?? 1.0f;
             set
             {
-                // Volume is a float from 0.0 to 1.0 (or higher for amplification)
                 _volumeProvider?.Volume = (float)Math.Clamp(value, 0.0, 2.0);
             }
         }
@@ -65,36 +61,129 @@ namespace Mechanical_Keyboard.Services
 
         private unsafe delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-        public KeyboardSoundService(string? soundFilePath)
+        public KeyboardSoundService(string soundPackDirectory)
         {
-            if (!string.IsNullOrEmpty(soundFilePath))
-            {
-                try
-                {
-                    _cachedSound = new CachedSound(soundFilePath);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[ERROR] Failed to load sound file: {ex.Message}");
-                }
-            }
+            LoadSoundPack(soundPackDirectory);
             _proc = HookCallback;
 
-            if (_cachedSound != null)
+            if (_soundMap.Count > 0)
             {
-                _playbackDevice = new WaveOutEvent { DesiredLatency = 80, NumberOfBuffers = 2 };
-                _mixer = new MixingSampleProvider(_cachedSound.WaveFormat) { ReadFully = true };
-                
-                // Create the volume provider and chain it to the mixer
+                var waveFormat = _soundMap.First().Value.WaveFormat;
+                _playbackDevice = new WaveOutEvent { DesiredLatency = 75, NumberOfBuffers = 2 };
+                _mixer = new MixingSampleProvider(waveFormat) { ReadFully = true };
                 _volumeProvider = new VolumeSampleProvider(_mixer);
 
-                // Set initial volume from settings
                 var settings = new SettingsService();
                 Volume = settings.CurrentSettings.Volume;
-                _volumeProvider.Volume = (float)(settings.CurrentSettings.Volume / 100.0);
-                // Initialize the playback device with the volume provider
+
                 _playbackDevice.Init(_volumeProvider);
                 _playbackDevice.Play();
+            }
+        }
+
+        private void LoadSoundPack(string directory)
+        {
+            _soundMap.Clear();
+
+            var rawSounds = new Dictionary<string, CachedSound>();
+            var soundNames = new[] { "key-press", "space-press", "enter-press", "backspace-press", "modifier-press" };
+            foreach (var name in soundNames)
+            {
+                var filePath = Path.Combine(directory, $"{name}.wav");
+                if (File.Exists(filePath))
+                {
+                    try
+                    {
+                        rawSounds[name] = new CachedSound(filePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[ERROR] Failed to load sound file '{filePath}': {ex.Message}");
+                    }
+                }
+            }
+
+            if (!rawSounds.TryGetValue("key-press", out var baseSound))
+            {
+                return;
+            }
+
+            var standardKeyPool = new SoundVariantPool(baseSound, 5);
+
+            var keyMappings = new Dictionary<string, int[]>
+            {
+                { "space-press", [0x20] },
+                { "enter-press", [0x0D] },
+                { "backspace-press", [0x08] },
+                { "modifier-press", [0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5] }
+            };
+
+            foreach (var mapping in keyMappings)
+            {
+                var soundName = mapping.Key;
+                var keyCodes = mapping.Value;
+                
+                SoundVariantPool poolToUse = rawSounds.TryGetValue(soundName, out var specialSound) 
+                    ? new SoundVariantPool(specialSound, 1) 
+                    : standardKeyPool;
+
+                foreach (var vkCode in keyCodes)
+                {
+                    _soundMap[vkCode] = poolToUse;
+                }
+            }
+
+            for (int i = 0; i < 256; i++)
+            {
+                if (!_soundMap.ContainsKey(i))
+                {
+                    _soundMap[i] = standardKeyPool;
+                }
+            }
+        }
+
+        private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            try
+            {
+                if (nCode >= 0)
+                {
+                    var kbdStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                    var vkCode = kbdStruct.vkCode;
+                    var msg = wParam.ToInt32();
+
+                    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
+                    {
+                        if (_keyStates.TryAdd(vkCode, true))
+                        {
+                            PlaySoundForKey(vkCode);
+                        }
+                    }
+                    else if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
+                    {
+                        _keyStates.TryRemove(vkCode, out _);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FATAL] Unhandled exception in keyboard hook: {ex}");
+            }
+            
+            return CallNextHookEx(_hookID, nCode, wParam, lParam);
+        }
+
+        private void PlaySoundForKey(int vkCode)
+        {
+            if (_mixer == null) return;
+
+            if (_soundMap.TryGetValue(vkCode, out var pool))
+            {
+                var provider = pool.GetProvider(_random);
+                if (provider != null)
+                {
+                    _mixer.AddMixerInput(provider);
+                }
             }
         }
 
@@ -120,52 +209,32 @@ namespace Mechanical_Keyboard.Services
             return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
         }
 
-        private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-        {
-            try
-            {
-                if (nCode >= 0)
-                {
-                    var kbdStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                    var vkCode = kbdStruct.vkCode;
-                    var wParamValue = wParam.ToInt32();
-
-                    if (wParamValue == WM_KEYDOWN || wParamValue == WM_SYSKEYDOWN)
-                    {
-                        // If TryAdd succeeds, the key was not previously down. This is the initial press.
-                        if (_keyStates.TryAdd(vkCode, true))
-                        {
-                            PlaySound();
-                        }
-                    }
-                    else if (wParamValue == WM_KEYUP || wParamValue == WM_SYSKEYUP)
-                    {
-                        // When the key is released, remove it from the dictionary.
-                        _keyStates.TryRemove(vkCode, out _);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[FATAL] Unhandled exception in keyboard hook: {ex}");
-            }
-            
-            return CallNextHookEx(_hookID, nCode, wParam, lParam);
-        }
-
-        private void PlaySound()
-        {
-            if (_cachedSound == null || _mixer == null) return;
-
-            var soundSampleProvider = new CachedSoundSampleProvider(_cachedSound);
-            _mixer.AddMixerInput(soundSampleProvider);
-        }
-
         public void Dispose()
         {
             Stop();
             _playbackDevice?.Dispose();
             GC.SuppressFinalize(this);
+        }
+
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            App.DispatcherQueue?.TryEnqueue(() =>
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            });
+        }
+
+        public async Task ReloadSoundPackAsync(string packName)
+        {
+            // Stop the current hook
+            Stop();
+
+            // Load the new sound pack on a background thread
+            var soundPackDir = App.SettingsService!.GetSoundPackDirectory(packName);
+            await Task.Run(() => LoadSoundPack(soundPackDir));
+
+            // Restart the hook
+            Start();
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -192,15 +261,62 @@ namespace Mechanical_Keyboard.Services
         private static partial IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
     }
 
-    public class CachedSoundSampleProvider(CachedSound cachedSound) : ISampleProvider
+    internal class SoundVariantPool
+    {
+        private readonly List<ResettableSampleProvider> _providers = [];
+        public WaveFormat WaveFormat { get; }
+
+        public SoundVariantPool(CachedSound baseSound, int variantCount)
+        {
+            WaveFormat = baseSound.WaveFormat;
+            if (variantCount <= 1)
+            {
+                _providers.Add(new ResettableSampleProvider(baseSound));
+            }
+            else
+            {
+                for (int i = 0; i < variantCount; i++)
+                {
+                    float pitch = 1.0f + (i - variantCount / 2.0f) * 0.08f;
+                    var pitchedSound = CreatePitchedVariant(baseSound, pitch);
+                    _providers.Add(new ResettableSampleProvider(pitchedSound));
+                }
+            }
+        }
+
+        public ISampleProvider? GetProvider(Random random)
+        {
+            if (_providers.Count == 0) return null;
+            
+            var provider = _providers[random.Next(_providers.Count)];
+            provider.Reset();
+            return provider;
+        }
+
+        private static CachedSound CreatePitchedVariant(CachedSound source, float pitchFactor)
+        {
+            var sourceProvider = new ResettableSampleProvider(source);
+            var resampler = new WdlResamplingSampleProvider(sourceProvider, (int)(source.WaveFormat.SampleRate * pitchFactor));
+            var wholeFile = new List<float>((int)(source.AudioData.Length / pitchFactor));
+            var readBuffer = new float[resampler.WaveFormat.SampleRate * resampler.WaveFormat.Channels];
+            int samplesRead;
+            while ((samplesRead = resampler.Read(readBuffer, 0, readBuffer.Length)) > 0)
+            {
+                wholeFile.AddRange(readBuffer.Take(samplesRead));
+            }
+            return new CachedSound([.. wholeFile], source.WaveFormat);
+        }
+    }
+
+    internal class ResettableSampleProvider(CachedSound cachedSound) : ISampleProvider
     {
         private long _position;
         public WaveFormat WaveFormat => cachedSound.WaveFormat;
 
         public int Read(float[] buffer, int offset, int count)
         {
-            var availableSamples = cachedSound.AudioData.Length - _position;
-            var samplesToCopy = Math.Min(availableSamples, count);
+            var available = cachedSound.AudioData.Length - _position;
+            var samplesToCopy = Math.Min(available, count);
             if (samplesToCopy > 0)
             {
                 Array.Copy(cachedSound.AudioData, _position, buffer, offset, samplesToCopy);
@@ -208,5 +324,7 @@ namespace Mechanical_Keyboard.Services
             }
             return (int)samplesToCopy;
         }
+
+        public void Reset() => _position = 0;
     }
 }
