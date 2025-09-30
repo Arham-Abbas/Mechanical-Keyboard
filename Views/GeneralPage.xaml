@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <Grid>
-        <StackPanel Margin="24" Spacing="8" MaxWidth="600" HorizontalAlignment="Left">
+        <StackPanel Margin="24" Spacing="12" MaxWidth="600" HorizontalAlignment="Left">
             <ToggleSwitch x:Name="EnableToggle"
                           Header="Enable Mechanical Keyboard"
                           IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}"/>

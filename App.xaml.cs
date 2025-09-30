@@ -12,6 +12,9 @@ using Mechanical_Keyboard.Helpers;
 using Windows.ApplicationModel;
 using Microsoft.UI.Xaml.Media.Imaging;
 using WinRT.Interop;
+using Microsoft.Windows.AppLifecycle;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 
 namespace Mechanical_Keyboard
 {
@@ -44,10 +47,35 @@ namespace Mechanical_Keyboard
                     InitializeServicesAsync()
                 );
 
-                bool startMinimized = args.Arguments.Contains("/background");
-                if (!startMinimized)
+                // Create the main window instance but don't show it yet.
+                _window = new MainWindow();
+                _window.Closed += (s, e) =>
                 {
-                    ShowSettingsWindow();
+                    if (_handleWindowClosed)
+                    {
+                        e.Handled = true;
+                        _window.Hide();
+                    }
+                };
+
+                // Use the AppLifecycle API to check the activation kind
+                var appActivationArguments = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+                if (appActivationArguments.Kind == ExtendedActivationKind.StartupTask)
+                {
+                    // If launched from startup, minimize the window.
+                    var hWnd = WindowNative.GetWindowHandle(_window);
+                    var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
+                    var appWindow = AppWindow.GetFromWindowId(windowId);
+                    if (appWindow.Presenter is OverlappedPresenter presenter)
+                    {
+                        presenter.Minimize();
+                    }
+                }
+                else
+                {
+                    // If launched normally (e.g., from Start Menu), activate and show the window.
+                    _window.Activate();
+                    _window.GetAppWindow().Show();
                 }
             }
             catch (Exception ex)
@@ -93,9 +121,8 @@ namespace Mechanical_Keyboard
             await Task.Run(() =>
             {
                 SettingsService = new SettingsService();
-                // Subscribe to the event BEFORE creating the sound service
                 SettingsService.SoundPackChanged += OnSoundPackChanged;
-                
+
                 var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
                 KeyboardSoundService = new KeyboardSoundService(soundPackDir);
             });
@@ -117,10 +144,18 @@ namespace Mechanical_Keyboard
 
         private async void OnSoundPackChanged(object? sender, EventArgs e)
         {
-            // This method is called when the user selects a new sound pack
+            KeyboardSoundService?.Dispose();
+
+            await Task.Run(() =>
+            {
+                var soundPackDir = SettingsService!.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
+                KeyboardSoundService = new KeyboardSoundService(soundPackDir);
+            });
+
             if (KeyboardSoundService != null)
             {
-                await KeyboardSoundService.ReloadSoundPackAsync(SettingsService!.CurrentSettings.SoundPackName);
+                KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
+                KeyboardSoundService.IsEnabled = SettingsService!.CurrentSettings.IsEnabled;
             }
         }
 
@@ -134,32 +169,20 @@ namespace Mechanical_Keyboard
 
         private void ShowSettingsWindow()
         {
-            if (_window == null)
+            // This method ensures the window is visible and activated.
+            if (_window != null)
             {
-                _window = new MainWindow();
-                _window.Closed += (s, e) =>
-                {
-                    if (_handleWindowClosed)
-                    {
-                        e.Handled = true;
-                        _window.Hide();
-                    }
-                };
+                _window.Activate();
+                _window.GetAppWindow().Show();
             }
-            
-            _window.Activate();
-            _window.GetAppWindow().Show();
         }
 
         private void ToggleEnabledCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
         {
             if (KeyboardSoundService == null || SettingsService == null) return;
 
-            // 1. Change the state in the service. This will trigger the PropertyChanged event
-            //    which updates all listening UI elements (the tray icon and the main window).
             KeyboardSoundService.IsEnabled = !KeyboardSoundService.IsEnabled;
 
-            // 2. Save the new state to the settings file to ensure it persists.
             SettingsService.CurrentSettings.IsEnabled = KeyboardSoundService.IsEnabled;
             SettingsService.SaveSettings(SettingsService.CurrentSettings);
         }

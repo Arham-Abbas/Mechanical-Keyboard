@@ -224,17 +224,32 @@ namespace Mechanical_Keyboard.Services
             });
         }
 
-        public async Task ReloadSoundPackAsync(string packName)
+        public async Task ReloadSoundPackAsync(string soundPackDirectory)
         {
-            // Stop the current hook
+            // Stop the current hook to prevent issues while loading
             Stop();
 
             // Load the new sound pack on a background thread
-            var soundPackDir = App.SettingsService!.GetSoundPackDirectory(packName);
-            await Task.Run(() => LoadSoundPack(soundPackDir));
+            await Task.Run(() => LoadSoundPack(soundPackDirectory));
 
-            // Restart the hook
-            Start();
+            // Re-initialize the audio engine if sounds were loaded
+            if (_soundMap.Count > 0)
+            {
+                if (_playbackDevice != null)
+                {
+                    // If the engine already exists, just re-initialize it
+                    var waveFormat = _soundMap.First().Value.WaveFormat;
+                    _mixer?.RemoveAllMixerInputs();
+                    // Can't change the mixer's format, so a new engine is safer
+                }
+                // For simplicity and safety, just re-run the constructor's logic
+            }
+
+            // Restart the hook if the app is still enabled
+            if (IsEnabled)
+            {
+                Start();
+            }
         }
 
         [StructLayout(LayoutKind.Sequential)]

@@ -10,20 +10,24 @@ namespace Mechanical_Keyboard
         public MainWindow()
         {
             InitializeComponent();
-            Title = "Mechanical Keyboard Settings";
+            Title = "Mechanical Keyboard";
 
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
-            // Navigate to the initial page
             ContentFrame.Navigate(typeof(GeneralPage));
             NavView.SelectedItem = GeneralNavItem;
+            // Set the initial header
+            NavView.Header = "General";
         }
 
         private void NavView_ItemInvoked(NavigationView _, NavigationViewItemInvokedEventArgs args)
         {
             if (args.InvokedItemContainer is NavigationViewItem item)
             {
+                // Update the header to the content of the clicked item
+                NavView.Header = item.Content.ToString();
+
                 Type? pageType = null;
                 switch (item.Tag?.ToString())
                 {
