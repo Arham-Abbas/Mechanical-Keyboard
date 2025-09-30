@@ -29,6 +29,9 @@ namespace Mechanical_Keyboard
         public static SettingsService? SettingsService { get; private set; }
         public static DispatcherQueue? DispatcherQueue { get; private set; }
 
+        // This static property provides access to the main window
+        public static Window? MainWindow => (Current as App)?._window;
+
         public App()
         {
             InitializeComponent();
@@ -204,11 +207,19 @@ namespace Mechanical_Keyboard
 
         private static async Task RegisterStartupTaskAsync()
         {
-            var startupTask = await StartupTask.GetAsync("MechanicalKeyboardAutoStart");
-            
-            if (startupTask.State == StartupTaskState.Disabled)
+            // This logic only runs ONCE in the application's lifetime.
+            if (SettingsService != null && SettingsService.CurrentSettings.IsFirstRun)
             {
-                await startupTask.RequestEnableAsync();
+                var startupTask = await StartupTask.GetAsync("MechanicalKeyboardAutoStart");
+                if (startupTask.State == StartupTaskState.Disabled)
+                {
+                    // Request to enable the task on first run.
+                    await startupTask.RequestEnableAsync();
+                }
+
+                // Mark first run as complete and save the setting.
+                SettingsService.CurrentSettings.IsFirstRun = false;
+                SettingsService.SaveSettings(SettingsService.CurrentSettings);
             }
         }
 

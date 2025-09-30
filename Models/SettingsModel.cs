@@ -7,7 +7,7 @@ namespace Mechanical_Keyboard.Models
         public bool IsEnabled { get; set; } = true;
         public double Volume { get; set; } = 1.0;
         public string SoundPackName { get; set; } = "Default";
-        public string? SoundFilePath { get; set; }
+        public bool IsFirstRun { get; set; } = true;
     }
 
     [JsonSerializable(typeof(SettingsModel))]

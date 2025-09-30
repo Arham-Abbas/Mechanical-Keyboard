@@ -15,27 +15,23 @@ namespace Mechanical_Keyboard
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
 
-            ContentFrame.Navigate(typeof(GeneralPage));
-            NavView.SelectedItem = GeneralNavItem;
-            // Set the initial header
-            NavView.Header = "General";
+            // Navigate to the single SettingsPage by default
+            ContentFrame.Navigate(typeof(SettingsPage));
+            NavView.SelectedItem = SettingsNavItem;
+            NavView.Header = "Settings";
         }
 
         private void NavView_ItemInvoked(NavigationView _, NavigationViewItemInvokedEventArgs args)
         {
             if (args.InvokedItemContainer is NavigationViewItem item)
             {
-                // Update the header to the content of the clicked item
                 NavView.Header = item.Content.ToString();
 
                 Type? pageType = null;
                 switch (item.Tag?.ToString())
                 {
-                    case "GeneralPage":
-                        pageType = typeof(GeneralPage);
-                        break;
-                    case "SoundPacksPage":
-                        pageType = typeof(SoundPacksPage);
+                    case "SettingsPage":
+                        pageType = typeof(SettingsPage);
                         break;
                     case "AboutPage":
                         pageType = typeof(AboutPage);

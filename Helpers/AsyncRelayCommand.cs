@@ -4,34 +4,36 @@ using System.Windows.Input;
 
 namespace Mechanical_Keyboard.Helpers
 {
-    public partial class AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null) : ICommand
+    public partial class AsyncRelayCommand<T>(Func<T?, Task> execute, Func<T?, bool>? canExecute = null) : ICommand
     {
-        private readonly Func<Task> _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        private readonly Func<bool>? _canExecute = canExecute;
+        private readonly Func<T?, Task> _execute = execute;
+        private readonly Func<T?, bool>? _canExecute = canExecute;
         private bool _isExecuting;
+
         public event EventHandler? CanExecuteChanged;
 
         public bool CanExecute(object? parameter)
         {
-            return !_isExecuting && (_canExecute?.Invoke() ?? true);
+            return !_isExecuting && (_canExecute?.Invoke((T?)parameter) ?? true);
         }
+
         public async void Execute(object? parameter)
         {
-            if (!CanExecute(parameter))
-                return;
+            _isExecuting = true;
+            OnCanExecuteChanged();
+
             try
             {
-                _isExecuting = true;
-                RaiseCanExecuteChanged();
-                await _execute();
+                await _execute((T?)parameter);
             }
             finally
             {
                 _isExecuting = false;
-                RaiseCanExecuteChanged();
+                OnCanExecuteChanged();
             }
         }
-        public void RaiseCanExecuteChanged()
+
+        public void OnCanExecuteChanged()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }

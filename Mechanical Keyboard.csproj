@@ -14,10 +14,10 @@
   </PropertyGroup>
   <ItemGroup>
     <None Remove="Assets\key-press.wav" />
+    <None Remove="Assets\SoundPacks\Default\pack.json" />
     <None Remove="Assets\TrayIcon.ico" />
     <None Remove="Views\AboutPage.xaml" />
-    <None Remove="Views\GeneralPage.xaml" />
-    <None Remove="Views\SoundPacksPage.xaml" />
+    <None Remove="Views\SettingsPage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -50,7 +50,7 @@
     <PackageReference Include="System.Windows.Extensions" Version="10.0.0-rc.1.25451.107" />
   </ItemGroup>
   <ItemGroup>
-    <Content Update="Assets\key-press.wav">
+    <Content Update="Assets\SoundPacks\Default\key-press.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Update="Assets\TrayIcon.ico">
@@ -58,17 +58,17 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <Content Update="Assets\SoundPacks\Default\pack.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\SettingsPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
     <Page Update="Views\AboutPage.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\SoundPacksPage.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\GeneralPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

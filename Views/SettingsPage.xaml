@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Mechanical_Keyboard.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Mechanical_Keyboard.Models"
+    mc:Ignorable="d">
+
+    <Page.DataContext>
+        <vm:SettingsViewModel xmlns:vm="using:Mechanical_Keyboard.ViewModels"/>
+    </Page.DataContext>
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="24" MaxWidth="960" HorizontalAlignment="Left">
+            
+            <!-- General Settings Section -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="General" Style="{ThemeResource TitleTextBlockStyle}" />
+                <ToggleSwitch x:Name="EnableToggle" Header="Enable Mechanical Keyboard" IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}" />
+                <Slider Header="Volume" Value="{x:Bind ViewModel.Volume, Mode=TwoWay}" Minimum="0" Maximum="100" StepFrequency="1" IsEnabled="{x:Bind EnableToggle.IsOn, Mode=OneWay}" />
+                
+                <!-- This ToggleSwitch now correctly calls the event handler -->
+                <ToggleSwitch 
+                    Header="Run at system startup" 
+                    IsOn="{x:Bind ViewModel.IsStartupTaskEnabled, Mode=OneWay}"
+                    Toggled="StartupToggle_Toggled"/>
+            </StackPanel>
+
+            <!-- Sound Packs Section -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Sound Packs" Style="{ThemeResource TitleTextBlockStyle}"/>
+                
+                <Button Command="{x:Bind ViewModel.ImportSoundPackCommand}" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8B5;" />
+                        <TextBlock Text="Import Sound Pack"/>
+                    </StackPanel>
+                </Button>
+
+                <Rectangle Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" Margin="0,12"/>
+
+                <ListView
+                    ItemsSource="{x:Bind ViewModel.SoundPacks}"
+                    SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=TwoWay}"
+                    SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="models:SoundPackInfo">
+                            <TextBlock Text="{x:Bind DisplayName}" Margin="0,4"/>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </StackPanel>
+            
+        </StackPanel>
+    </ScrollViewer>
+</Page>

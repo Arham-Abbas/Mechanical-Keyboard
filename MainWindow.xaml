@@ -30,14 +30,11 @@
                         IsSettingsVisible="False"
                         ItemInvoked="NavView_ItemInvoked">
             <NavigationView.MenuItems>
-                <!-- Give the General item a name -->
-                <NavigationViewItem x:Name="GeneralNavItem" Content="General" Tag="GeneralPage" Icon="Setting"/>
-                <NavigationViewItem Content="Sound Packs" Tag="SoundPacksPage" Icon="Audio"/>
-                <NavigationViewItemSeparator/>
+                <!-- Simplified Navigation -->
+                <NavigationViewItem x:Name="SettingsNavItem" Content="Settings" Tag="SettingsPage" Icon="Setting"/>
                 <NavigationViewItem Content="About" Tag="AboutPage" Icon="Help"/>
             </NavigationView.MenuItems>
 
-            <!-- The Frame is now empty, ready to host our pages -->
             <Frame x:Name="ContentFrame" />
         </NavigationView>
     </Grid>
