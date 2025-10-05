@@ -26,6 +26,7 @@ namespace Mechanical_Keyboard.ViewModels
         private SoundPackInfo? _selectedSoundPack;
         private bool _isStartupTaskEnabled;
         private bool _isGridView = true;
+        private bool _isServiceToggleEnabled = true;
 
         // This command will handle the logic for the startup toggle
         public ICommand SetStartupTaskCommand { get; }
@@ -39,6 +40,19 @@ namespace Mechanical_Keyboard.ViewModels
                 if (App.KeyboardSoundService != null && App.KeyboardSoundService.IsEnabled != value)
                 {
                     App.KeyboardSoundService.IsEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsServiceToggleEnabled
+        {
+            get => _isServiceToggleEnabled;
+            set
+            {
+                if (_isServiceToggleEnabled != value)
+                {
+                    _isServiceToggleEnabled = value;
                     OnPropertyChanged();
                 }
             }
@@ -93,10 +107,13 @@ namespace Mechanical_Keyboard.ViewModels
             get => _selectedSoundPack;
             set
             {
-                if (_selectedSoundPack != value && value != null)
-                {
-                    _selectedSoundPack = value;
+                // This handles the case where the list is cleared and the selection is removed
+                if (_selectedSoundPack == value) return;
 
+                _selectedSoundPack = value;
+
+                if (value != null)
+                {
                     // 1. Persist the new setting
                     _settingsService.CurrentSettings.SoundPackName = value.DisplayName;
                     _settingsService.SaveSettings(_settingsService.CurrentSettings);
@@ -104,11 +121,17 @@ namespace Mechanical_Keyboard.ViewModels
                     // 2. Directly command the service to reload
                     var packDirectory = _settingsService.GetSoundPackDirectory(value.DisplayName);
                     App.KeyboardSoundService?.ReloadSoundPack(packDirectory);
-
-                    OnPropertyChanged();
-                    // Refresh the CanExecute state of the delete command
-                    (DeleteSoundPackCommand as AsyncRelayCommand<object?>)?.OnCanExecuteChanged();
                 }
+                else
+                {
+                    // If no pack is selected (e.g., all were deleted), update settings accordingly
+                    _settingsService.CurrentSettings.SoundPackName = string.Empty;
+                    _settingsService.SaveSettings(_settingsService.CurrentSettings);
+                }
+
+                OnPropertyChanged();
+                // Refresh the CanExecute state of the delete command
+                (DeleteSoundPackCommand as AsyncRelayCommand<object?>)?.OnCanExecuteChanged();
             }
         }
 
@@ -144,7 +167,7 @@ namespace Mechanical_Keyboard.ViewModels
         {
             _settingsService = App.SettingsService!;
             ImportSoundPackCommand = new AsyncRelayCommand<object?>(ImportSoundPackAsync);
-            DeleteSoundPackCommand = new AsyncRelayCommand<object?>(DeleteSoundPackAsync, _ => SelectedSoundPack?.IsDefault == false);
+            DeleteSoundPackCommand = new AsyncRelayCommand<object?>(DeleteSoundPackAsync, _ => SelectedSoundPack != null);
             SetStartupTaskCommand = new AsyncRelayCommand<bool?>(SetStartupTaskStateAsync);
             SetGridViewCommand = new RelayCommand(() => IsGridView = true);
             SetListViewCommand = new RelayCommand(() => IsGridView = false);
@@ -154,6 +177,7 @@ namespace Mechanical_Keyboard.ViewModels
 
             LoadSoundPacks();
             _selectedSoundPack = SoundPacks.FirstOrDefault(p => p.DisplayName == _settingsService.CurrentSettings.SoundPackName);
+            CheckServiceState();
 
             InitializeAsync();
 
@@ -211,6 +235,20 @@ namespace Mechanical_Keyboard.ViewModels
             foreach (var pack in packs)
             {
                 SoundPacks.Add(pack);
+            }
+            CheckServiceState();
+        }
+
+        private void CheckServiceState()
+        {
+            if (SoundPacks.Count == 0)
+            {
+                IsEnabled = false;
+                IsServiceToggleEnabled = false;
+            }
+            else
+            {
+                IsServiceToggleEnabled = true;
             }
         }
 
@@ -279,10 +317,20 @@ namespace Mechanical_Keyboard.ViewModels
 
         private async Task DeleteSoundPackAsync(object? _)
         {
-            if (SelectedSoundPack == null || SelectedSoundPack.IsDefault) return;
+            if (SelectedSoundPack == null) return;
 
-            await _settingsService.DeleteSoundPackAsync(SelectedSoundPack);
+            var packToDelete = SelectedSoundPack;
+            var result = await DialogHelper.ShowDeleteConfirmationDialogAsync(packToDelete.DisplayName, packToDelete.IsDefault);
+            if (result != Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            await _settingsService.DeleteSoundPackAsync(packToDelete);
             LoadSoundPacks();
+
+            // If the deleted pack was the last one, select null. Otherwise, select the first available pack.
+            SelectedSoundPack = SoundPacks.FirstOrDefault();
         }
 
         // Method to handle the preview logic - now an instance method

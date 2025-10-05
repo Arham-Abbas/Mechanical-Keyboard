@@ -82,6 +82,27 @@ namespace Mechanical_Keyboard.Helpers
             return await dialog.ShowAsync();
         }
 
+        public static async Task<ContentDialogResult> ShowDeleteConfirmationDialogAsync(string packName, bool isDefault)
+        {
+            if (App.MainWindow?.Content is not FrameworkElement rootElement)
+            {
+                return ContentDialogResult.None;
+            }
+
+            var dialog = new ContentDialog
+            {
+                Title = "Delete Sound Pack",
+                Content = isDefault
+                    ? $"Are you sure you want to delete the default sound pack '{packName}'? This can only be restored by an app update or reinstallation if you have 'Restore default packs' enabled."
+                    : $"Are you sure you want to permanently delete the '{packName}' sound pack?",
+                PrimaryButtonText = "Delete",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = rootElement.XamlRoot
+            };
+            return await dialog.ShowAsync();
+        }
+
         public static async Task<ContentDialogResult> ShowFFmpegDownloadConfirmationDialogAsync()
         {
             if (App.MainWindow?.Content is not FrameworkElement rootElement)

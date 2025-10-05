@@ -7,8 +7,6 @@
         EnterPress,
         SpacePress,
         BackspacePress,
-        ShiftPress,
-        TabPress,
-        // Add other specific key types here in the future if needed
+        ModifierPress // Single option for all modifier keys
     }
 }

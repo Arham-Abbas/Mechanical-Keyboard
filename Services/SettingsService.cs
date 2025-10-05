@@ -52,8 +52,7 @@ namespace Mechanical_Keyboard.Services
                 KeyAssignmentType.SpacePress => "space-press",
                 KeyAssignmentType.EnterPress => "enter-press",
                 KeyAssignmentType.BackspacePress => "backspace-press",
-                KeyAssignmentType.ShiftPress => "modifier-press",
-                KeyAssignmentType.TabPress => "modifier-press",
+                KeyAssignmentType.ModifierPress => "modifier-press",
                 _ => "key-press" // Default fallback for any other assignments
             };
         }
@@ -275,13 +274,6 @@ namespace Mechanical_Keyboard.Services
             if (!Directory.Exists(packToDelete.PackDirectory)) return;
 
             await Task.Run(() => Directory.Delete(packToDelete.PackDirectory, true));
-
-            // If the deleted pack was the currently selected one, fall back to "Default".
-            if (CurrentSettings.SoundPackName == packToDelete.DisplayName)
-            {
-                CurrentSettings.SoundPackName = "Default";
-                SaveSettings(CurrentSettings);
-            }
         }
 
         public SettingsModel LoadSettings()
