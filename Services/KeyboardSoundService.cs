@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using Mechanical_Keyboard.Models;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -63,8 +62,8 @@ namespace Mechanical_Keyboard.Services
 
         public KeyboardSoundService(string soundPackDirectory)
         {
-            LoadSoundPack(soundPackDirectory);
             _proc = HookCallback;
+            LoadSoundPack(soundPackDirectory);
 
             if (_soundMap.Count > 0)
             {
@@ -73,17 +72,34 @@ namespace Mechanical_Keyboard.Services
                 _mixer = new MixingSampleProvider(waveFormat) { ReadFully = true };
                 _volumeProvider = new VolumeSampleProvider(_mixer);
 
-                var settings = new SettingsService();
-                Volume = settings.CurrentSettings.Volume;
+                if (App.SettingsService != null)
+                {
+                    Volume = App.SettingsService.CurrentSettings.Volume;
+                }
 
                 _playbackDevice.Init(_volumeProvider);
                 _playbackDevice.Play();
             }
+            else
+            {
+                Debug.WriteLine($"[ERROR] Audio engine not initialized because no sounds were loaded from '{soundPackDirectory}'.");
+            }
+        }
+
+        public void ReloadSoundPack(string newSoundPackDirectory)
+        {
+            Debug.WriteLine($"Reloading sound pack from: {newSoundPackDirectory}");
+            // This is now a lightweight operation that only swaps out the sound data.
+            LoadSoundPack(newSoundPackDirectory);
         }
 
         private void LoadSoundPack(string directory)
         {
             _soundMap.Clear();
+
+            var packInfo = App.SettingsService?.GetAvailableSoundPacks().FirstOrDefault(p => p.PackDirectory == directory);
+            // Default to true if pack info isn't found, preserving old behavior for safety.
+            bool hasPitchVariants = packInfo?.HasPitchVariants ?? true;
 
             var rawSounds = new Dictionary<string, CachedSound>();
             var soundNames = new[] { "key-press", "space-press", "enter-press", "backspace-press", "modifier-press" };
@@ -101,14 +117,21 @@ namespace Mechanical_Keyboard.Services
                         Debug.WriteLine($"[ERROR] Failed to load sound file '{filePath}': {ex.Message}");
                     }
                 }
+                else
+                {
+                    Debug.WriteLine($"[WARN] Sound file not found: {filePath}");
+                }
             }
 
             if (!rawSounds.TryGetValue("key-press", out var baseSound))
             {
+                Debug.WriteLine($"[ERROR] Could not load base 'key-press.wav' from '{directory}'. Sound pack loading failed.");
                 return;
             }
 
-            var standardKeyPool = new SoundVariantPool(baseSound, 5);
+            // Use the loaded setting to determine the number of variants.
+            var variantCount = hasPitchVariants ? 5 : 1;
+            var standardKeyPool = new SoundVariantPool(baseSound, variantCount);
 
             var keyMappings = new Dictionary<string, int[]>
             {
@@ -124,7 +147,7 @@ namespace Mechanical_Keyboard.Services
                 var keyCodes = mapping.Value;
                 
                 SoundVariantPool poolToUse = rawSounds.TryGetValue(soundName, out var specialSound) 
-                    ? new SoundVariantPool(specialSound, 1) 
+                    ? new SoundVariantPool(specialSound, 1) // Special sounds never have variants
                     : standardKeyPool;
 
                 foreach (var vkCode in keyCodes)
@@ -224,31 +247,27 @@ namespace Mechanical_Keyboard.Services
             });
         }
 
-        public async Task ReloadSoundPackAsync(string soundPackDirectory)
+        public void PlayPreviewSound(string filePath)
         {
-            // Stop the current hook to prevent issues while loading
-            Stop();
-
-            // Load the new sound pack on a background thread
-            await Task.Run(() => LoadSoundPack(soundPackDirectory));
-
-            // Re-initialize the audio engine if sounds were loaded
-            if (_soundMap.Count > 0)
+            if (_mixer is null || !IsEnabled)
             {
-                if (_playbackDevice != null)
-                {
-                    // If the engine already exists, just re-initialize it
-                    var waveFormat = _soundMap.First().Value.WaveFormat;
-                    _mixer?.RemoveAllMixerInputs();
-                    // Can't change the mixer's format, so a new engine is safer
-                }
-                // For simplicity and safety, just re-run the constructor's logic
+                return;
             }
 
-            // Restart the hook if the app is still enabled
-            if (IsEnabled)
+            if (!File.Exists(filePath))
             {
-                Start();
+                Debug.WriteLine($"[WARN] Preview sound file not found: {filePath}");
+                return;
+            }
+
+            try
+            {
+                var previewSound = new CachedSound(filePath);
+                _mixer.AddMixerInput(new ResettableSampleProvider(previewSound));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ERROR] Failed to play preview sound '{filePath}': {ex.Message}");
             }
         }
 

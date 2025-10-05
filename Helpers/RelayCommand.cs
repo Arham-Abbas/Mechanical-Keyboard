@@ -3,6 +3,7 @@ using System.Windows.Input;
 
 namespace Mechanical_Keyboard.Helpers
 {
+    // This is the original, non-generic RelayCommand. It is clean and works.
     public partial class RelayCommand(Action execute, Func<bool>? canExecute = null) : ICommand
     {
         private readonly Action _execute = execute;
@@ -14,6 +15,9 @@ namespace Mechanical_Keyboard.Helpers
 
         public void Execute(object? parameter) => _execute();
 
-        public void OnCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        public void OnCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

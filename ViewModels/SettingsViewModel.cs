@@ -1,14 +1,22 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Mechanical_Keyboard.Dialogs;
+using Mechanical_Keyboard.Exceptions;
 using Mechanical_Keyboard.Helpers;
 using Mechanical_Keyboard.Models;
 using Mechanical_Keyboard.Services;
 using Windows.ApplicationModel;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace Mechanical_Keyboard.ViewModels
 {
@@ -17,6 +25,7 @@ namespace Mechanical_Keyboard.ViewModels
         private readonly SettingsService _settingsService;
         private SoundPackInfo? _selectedSoundPack;
         private bool _isStartupTaskEnabled;
+        private bool _isGridView = true;
 
         // This command will handle the logic for the startup toggle
         public ICommand SetStartupTaskCommand { get; }
@@ -51,12 +60,27 @@ namespace Mechanical_Keyboard.ViewModels
         public bool IsStartupTaskEnabled
         {
             get => _isStartupTaskEnabled;
-            // The setter is now private to prevent the UI from changing it directly
+            // The setter is private to prevent the UI from changing it directly
             private set
             {
                 if (_isStartupTaskEnabled != value)
                 {
                     _isStartupTaskEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // Property for the restore toggle
+        public bool RestoreDeletedPacksOnUpdate
+        {
+            get => _settingsService.CurrentSettings.RestoreDeletedPacksOnUpdate;
+            set
+            {
+                if (_settingsService.CurrentSettings.RestoreDeletedPacksOnUpdate != value)
+                {
+                    _settingsService.CurrentSettings.RestoreDeletedPacksOnUpdate = value;
+                    _settingsService.SaveSettings(_settingsService.CurrentSettings);
                     OnPropertyChanged();
                 }
             }
@@ -72,24 +96,61 @@ namespace Mechanical_Keyboard.ViewModels
                 if (_selectedSoundPack != value && value != null)
                 {
                     _selectedSoundPack = value;
+
+                    // 1. Persist the new setting
                     _settingsService.CurrentSettings.SoundPackName = value.DisplayName;
                     _settingsService.SaveSettings(_settingsService.CurrentSettings);
+
+                    // 2. Directly command the service to reload
+                    var packDirectory = _settingsService.GetSoundPackDirectory(value.DisplayName);
+                    App.KeyboardSoundService?.ReloadSoundPack(packDirectory);
+
                     OnPropertyChanged();
+                    // Refresh the CanExecute state of the delete command
+                    (DeleteSoundPackCommand as AsyncRelayCommand<object?>)?.OnCanExecuteChanged();
                 }
             }
         }
 
         public ICommand ImportSoundPackCommand { get; }
+        public ICommand DeleteSoundPackCommand { get; }
+
+        // Properties and commands for the view switcher
+        public bool IsGridView
+        {
+            get => _isGridView;
+            set
+            {
+                if (_isGridView != value)
+                {
+                    _isGridView = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsListView));
+                }
+            }
+        }
+
+        public bool IsListView => !_isGridView;
+
+        public ICommand SetGridViewCommand { get; }
+        public ICommand SetListViewCommand { get; }
+
+        // Command for the preview button
+        public ICommand PreviewSoundPackCommand { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
         public SettingsViewModel()
         {
             _settingsService = App.SettingsService!;
-            ImportSoundPackCommand = new RelayCommand(ImportSoundPack);
-            
-            // Initialize the new command
+            ImportSoundPackCommand = new AsyncRelayCommand<object?>(ImportSoundPackAsync);
+            DeleteSoundPackCommand = new AsyncRelayCommand<object?>(DeleteSoundPackAsync, _ => SelectedSoundPack?.IsDefault == false);
             SetStartupTaskCommand = new AsyncRelayCommand<bool?>(SetStartupTaskStateAsync);
+            SetGridViewCommand = new RelayCommand(() => IsGridView = true);
+            SetListViewCommand = new RelayCommand(() => IsGridView = false);
+
+            // Correctly initialize the command to use the instance method
+            PreviewSoundPackCommand = new RelayCommand<SoundPackInfo?>(p => PreviewSoundPack(p));
 
             LoadSoundPacks();
             _selectedSoundPack = SoundPacks.FirstOrDefault(p => p.DisplayName == _settingsService.CurrentSettings.SoundPackName);
@@ -119,13 +180,13 @@ namespace Mechanical_Keyboard.ViewModels
             IsStartupTaskEnabled = startupTask.State is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
         }
 
-        // This method is now a proper async Task and is executed by the command
+        // This method is a proper async Task and is executed by the command
         private async Task SetStartupTaskStateAsync(bool? enable)
         {
             if (enable is null) return;
 
             var startupTask = await StartupTask.GetAsync("MechanicalKeyboardAutoStart");
-            
+
             if (enable.Value)
             {
                 var newState = await startupTask.RequestEnableAsync();
@@ -153,9 +214,89 @@ namespace Mechanical_Keyboard.ViewModels
             }
         }
 
-        private static void ImportSoundPack()
+        private async Task ImportSoundPackAsync(object? arg)
         {
-            // This method will be implemented later with the new "Import Dialog"
+            IReadOnlyList<StorageFile>? files = null;
+            try
+            {
+                var filePicker = new FileOpenPicker
+                {
+                    SuggestedStartLocation = PickerLocationId.MusicLibrary,
+                    FileTypeFilter = { ".wav", ".mp3", ".m4a", ".aac" },
+                    ViewMode = PickerViewMode.List
+                };
+
+                var hwnd = App.GetMainWindowHandle();
+                InitializeWithWindow.Initialize(filePicker, hwnd);
+
+                files = await filePicker.PickMultipleFilesAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ERROR] File picker failed: {ex.Message}");
+                return;
+            }
+
+            if (files == null || files.Count == 0) return;
+
+            var dialogViewModel = new ImportDialogViewModel(files.Select(f => f.Path));
+            var dialog = new CreateSoundPackDialog(dialogViewModel)
+            {
+                XamlRoot = App.MainWindow?.Content.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+
+            if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+            {
+                var model = dialogViewModel.CreateModel();
+                if (model != null)
+                {
+                    try
+                    {
+                        await _settingsService.CreateSoundPackAsync(model);
+                    }
+                    catch (PackExistsException ex)
+                    {
+                        var overwriteResult = await DialogHelper.ShowOverwriteConfirmationDialogAsync(ex.PackName);
+                        if (overwriteResult == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+                        {
+                            await _settingsService.CreateSoundPackAsync(model, overwrite: true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[ERROR] Failed to create sound pack: {ex.Message}");
+                    }
+                    finally
+                    {
+                        LoadSoundPacks();
+                        SelectedSoundPack = SoundPacks.FirstOrDefault(p => p.DisplayName == model.PackName);
+                    }
+                }
+            }
+        }
+
+        private async Task DeleteSoundPackAsync(object? _)
+        {
+            if (SelectedSoundPack == null || SelectedSoundPack.IsDefault) return;
+
+            await _settingsService.DeleteSoundPackAsync(SelectedSoundPack);
+            LoadSoundPacks();
+        }
+
+        // Method to handle the preview logic - now an instance method
+        private void PreviewSoundPack(SoundPackInfo? pack)
+        {
+            if (pack is null || App.KeyboardSoundService is null)
+            {
+                return;
+            }
+
+            // Get the authoritative directory from the service, not from the UI object.
+            var packDirectory = _settingsService.GetSoundPackDirectory(pack.DisplayName);
+            var soundFilePath = Path.Combine(packDirectory, "key-press.wav");
+            App.KeyboardSoundService.PlayPreviewSound(soundFilePath);
         }
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

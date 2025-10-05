@@ -7,15 +7,15 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <StackPanel Margin="24" Spacing="12" MaxWidth="600" HorizontalAlignment="Left">
-            <TextBlock Text="Mechanical Keyboard" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-            <TextBlock Text="Version 1.0.0" Style="{ThemeResource BodyTextBlockStyle}"/>
-            <TextBlock Text="Created by Arham" Style="{ThemeResource BodyTextBlockStyle}"/>
-            <TextBlock Text="A lightweight app that provides mechanical keyboard sound emulation." 
-                       Style="{ThemeResource BodyTextBlockStyle}" 
-                       TextWrapping="Wrap"
-                       Margin="0,12,0,0"/>
-        </StackPanel>
-    </Grid>
+<Grid>
+    <StackPanel Margin="24" Spacing="12" MaxWidth="600" HorizontalAlignment="Left">
+      <TextBlock Text="Mechanical Keyboard" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+      <TextBlock Text="{x:Bind AppVersion, Mode=OneTime}" Style="{ThemeResource BodyTextBlockStyle}"/>
+      <TextBlock Text="Created by Arham" Style="{ThemeResource BodyTextBlockStyle}"/>
+      <TextBlock Text="A lightweight app that provides mechanical keyboard sound emulation." 
+                 Style="{ThemeResource BodyTextBlockStyle}" 
+                 TextWrapping="Wrap"
+                 Margin="0,12,0,0"/>
+    </StackPanel>
+  </Grid>
 </Page>

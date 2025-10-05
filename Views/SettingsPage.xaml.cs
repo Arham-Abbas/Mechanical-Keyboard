@@ -1,3 +1,4 @@
+using Mechanical_Keyboard.Models;
 using Mechanical_Keyboard.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -41,7 +42,7 @@ namespace Mechanical_Keyboard.Views
             }
         }
 
-        private void StartupToggle_Toggled(object sender, RoutedEventArgs e)
+        private void StartupToggle_Toggled(object sender, RoutedEventArgs _)
         {
             if (sender is ToggleSwitch toggle)
             {
@@ -59,6 +60,14 @@ namespace Mechanical_Keyboard.Views
                     // 2. Execute the command with the user's INTENDED new state.
                     ViewModel.SetStartupTaskCommand.Execute(!previousState);
                 }
+            }
+        }
+
+        private void PreviewButton_Click(object sender, RoutedEventArgs _)
+        {
+            if (sender is FrameworkElement button && button.DataContext is SoundPackInfo soundPack)
+            {
+                ViewModel.PreviewSoundPackCommand.Execute(soundPack);
             }
         }
     }

@@ -13,9 +13,17 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Exceptions\desktop.ini\**" />
+    <EmbeddedResource Remove="Exceptions\desktop.ini\**" />
+    <None Remove="Exceptions\desktop.ini\**" />
+    <Page Remove="Exceptions\desktop.ini\**" />
+  </ItemGroup>
+  <ItemGroup>
     <None Remove="Assets\key-press.wav" />
+    <None Remove="Assets\SoundPacks\Default\key-press.wav" />
     <None Remove="Assets\SoundPacks\Default\pack.json" />
     <None Remove="Assets\TrayIcon.ico" />
+    <None Remove="Dialogs\CreateSoundPackDialog.xaml" />
     <None Remove="Views\AboutPage.xaml" />
     <None Remove="Views\SettingsPage.xaml" />
   </ItemGroup>
@@ -24,9 +32,13 @@
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\Square150x150Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\StoreLogo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
@@ -47,7 +59,10 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250916003" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="System.Windows.Extensions" Version="10.0.0-rc.1.25451.107" />
+    <PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
+    <PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.0.2" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="Assets\SoundPacks\Default\key-press.wav">
@@ -69,6 +84,11 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\AboutPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Dialogs\CreateSoundPackDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
@@ -116,4 +136,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
   </PropertyGroup>
+  <ItemGroup>
+    <PRIResource Remove="Exceptions\desktop.ini\**" />
+  </ItemGroup>
 </Project>

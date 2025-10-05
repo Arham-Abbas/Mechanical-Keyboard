@@ -19,12 +19,22 @@ namespace Mechanical_Keyboard.Helpers
 
         public async void Execute(object? parameter)
         {
-            _isExecuting = true;
-            OnCanExecuteChanged();
-
+            // The entire operation must be wrapped in a try/catch block
+            // to prevent any exception from escaping the 'async void' method.
             try
             {
-                await _execute((T?)parameter);
+                if (CanExecute(parameter))
+                {
+                    _isExecuting = true;
+                    OnCanExecuteChanged();
+
+                    await _execute((T?)parameter);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception instead of crashing the application.
+                System.Diagnostics.Debug.WriteLine($"[FATAL] Unhandled exception in AsyncRelayCommand: {ex}");
             }
             finally
             {

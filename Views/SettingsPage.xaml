@@ -6,32 +6,93 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:Mechanical_Keyboard.Models"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    x:Name="SettingsPageRoot"> <!-- Give the page a name for element binding -->
 
     <Page.DataContext>
         <vm:SettingsViewModel xmlns:vm="using:Mechanical_Keyboard.ViewModels"/>
     </Page.DataContext>
 
+    <Page.Resources>
+        <!-- DataTemplate for the GridView items -->
+        <DataTemplate x:Key="SoundPackGridTemplate" x:DataType="models:SoundPackInfo">
+            <StackPanel Padding="8" Spacing="8" Width="160">
+                <Image Source="{x:Bind ResolvedCoverImagePath}" Height="120" Width="120" Stretch="UniformToFill" HorizontalAlignment="Center"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Bind DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <!-- Preview Button for GridView -->
+                    <Button Grid.Column="1" 
+                            Click="PreviewButton_Click"
+                            Style="{ThemeResource SubtleButtonStyle}">
+                        <FontIcon Glyph="&#xE768;" FontSize="16"/>
+                    </Button>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- DataTemplate for the ListView items -->
+        <DataTemplate x:Key="SoundPackListTemplate" x:DataType="models:SoundPackInfo">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/> <!-- Column for the button -->
+                    <ColumnDefinition Width="*"/>    <!-- Column for the text -->
+                </Grid.ColumnDefinitions>
+
+                <!-- Preview Button for ListView  -->
+                <Button Grid.Column="0" 
+                        Click="PreviewButton_Click"
+                        Style="{ThemeResource SubtleButtonStyle}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0">
+                    <FontIcon Glyph="&#xE768;" FontSize="16"/>
+                </Button>
+                
+                <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" VerticalAlignment="Center" Margin="0,4"/>
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
+
     <ScrollViewer>
-        <StackPanel Margin="24" Spacing="24" MaxWidth="960" HorizontalAlignment="Left">
+        <StackPanel Margin="24" Spacing="24" >
             
             <!-- General Settings Section -->
             <StackPanel Spacing="12">
                 <TextBlock Text="General" Style="{ThemeResource TitleTextBlockStyle}" />
                 <ToggleSwitch x:Name="EnableToggle" Header="Enable Mechanical Keyboard" IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}" />
-                <Slider Header="Volume" Value="{x:Bind ViewModel.Volume, Mode=TwoWay}" Minimum="0" Maximum="100" StepFrequency="1" IsEnabled="{x:Bind EnableToggle.IsOn, Mode=OneWay}" />
-                
-                <!-- This ToggleSwitch now correctly calls the event handler -->
+                <Slider Header="Volume" Value="{x:Bind ViewModel.Volume, Mode=TwoWay}" Minimum="0" Maximum="100" Width="200" HorizontalAlignment="Left" StepFrequency="1"  IsEnabled="{x:Bind EnableToggle.IsOn, Mode=OneWay}" />
                 <ToggleSwitch 
                     Header="Run at system startup" 
                     IsOn="{x:Bind ViewModel.IsStartupTaskEnabled, Mode=OneWay}"
                     Toggled="StartupToggle_Toggled"/>
+                <ToggleSwitch
+                    Header="Restore default packs on app update"
+                    IsOn="{x:Bind ViewModel.RestoreDeletedPacksOnUpdate, Mode=TwoWay}"/>
             </StackPanel>
 
             <!-- Sound Packs Section -->
             <StackPanel Spacing="12">
-                <TextBlock Text="Sound Packs" Style="{ThemeResource TitleTextBlockStyle}"/>
-                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Sound Packs" Style="{ThemeResource TitleTextBlockStyle}" VerticalAlignment="Center"/>
+
+                    <!-- View Switcher Buttons -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Button Command="{x:Bind ViewModel.SetListViewCommand}" IsEnabled="{x:Bind ViewModel.IsGridView, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE8A5;" />
+                        </Button>
+                        <Button Command="{x:Bind ViewModel.SetGridViewCommand}" IsEnabled="{x:Bind ViewModel.IsListView, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE8A9;" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
                 <Button Command="{x:Bind ViewModel.ImportSoundPackCommand}" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8B5;" />
@@ -39,17 +100,22 @@
                     </StackPanel>
                 </Button>
 
-                <Rectangle Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" Margin="0,12"/>
+                <!-- GridView for sound packs -->
+                <GridView
+                    ItemsSource="{x:Bind ViewModel.SoundPacks}"
+                    SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=TwoWay}"
+                    SelectionMode="Single"
+                    ItemTemplate="{StaticResource SoundPackGridTemplate}"
+                    Visibility="{x:Bind ViewModel.IsGridView, Mode=OneWay}">
+                </GridView>
 
+                <!-- ListView for sound packs -->
                 <ListView
                     ItemsSource="{x:Bind ViewModel.SoundPacks}"
                     SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=TwoWay}"
-                    SelectionMode="Single">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="models:SoundPackInfo">
-                            <TextBlock Text="{x:Bind DisplayName}" Margin="0,4"/>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
+                    SelectionMode="Single"
+                    ItemTemplate="{StaticResource SoundPackListTemplate}"
+                    Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay}">
                 </ListView>
             </StackPanel>
             

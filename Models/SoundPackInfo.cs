@@ -9,10 +9,15 @@ namespace Mechanical_Keyboard.Models
         public string DisplayName { get; set; } = "Unknown Pack";
         public string Description { get; set; } = string.Empty;
         public string CoverImage { get; set; } = string.Empty;
+        public bool HasPitchVariants { get; set; } = true;
 
         // This property is not part of the JSON, it's set after loading.
         [JsonIgnore]
         public string PackDirectory { get; set; } = string.Empty;
+
+        // Property to distinguish default packs from user-imported ones.
+        [JsonIgnore]
+        public bool IsDefault { get; set; }
 
         // This is the smart property the UI will bind to.
         [JsonIgnore]
@@ -29,7 +34,7 @@ namespace Mechanical_Keyboard.Models
                     }
                 }
                 // Fallback to the default app icon if no custom image is found.
-                return "ms-appx:///Assets/Square44x44Logo.png";
+                return "ms-appx:///Assets/Square44x44Logo.scale-200.png";
             }
         }
     }

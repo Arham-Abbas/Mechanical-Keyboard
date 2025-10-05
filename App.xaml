@@ -3,12 +3,18 @@
     x:Class="Mechanical_Keyboard.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Mechanical_Keyboard">
+    xmlns:local="using:Mechanical_Keyboard"
+    xmlns:helpers="using:Mechanical_Keyboard.Helpers">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
+            
+            <helpers:InvertedBooleanConverter x:Key="InvertedBooleanConverter"/>
+            <!-- Add the new converter for opacity -->
+            <helpers:InvertedBooleanToOpacityConverter x:Key="InvertedBooleanToOpacityConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

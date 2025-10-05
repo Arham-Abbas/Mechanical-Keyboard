@@ -15,22 +15,20 @@ using WinRT.Interop;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
+using System.IO;
 
 namespace Mechanical_Keyboard
 {
     public partial class App : Application
     {
+        public static MainWindow? MainWindow { get; private set; }
+        public static SettingsService? SettingsService { get; private set; }
+        public static KeyboardSoundService? KeyboardSoundService { get; private set; }
+        public static DispatcherQueue? DispatcherQueue { get; private set; }
         private Window? _window;
         private bool _handleWindowClosed = true;
         private ToggleMenuFlyoutItem? _toggleEnabledMenuItem;
         private TaskbarIcon? _trayIcon;
-
-        public static KeyboardSoundService? KeyboardSoundService { get; private set; }
-        public static SettingsService? SettingsService { get; private set; }
-        public static DispatcherQueue? DispatcherQueue { get; private set; }
-
-        // This static property provides access to the main window
-        public static Window? MainWindow => (Current as App)?._window;
 
         public App()
         {
@@ -42,16 +40,46 @@ namespace Mechanical_Keyboard
             try
             {
                 DispatcherQueue = DispatcherQueue.GetForCurrentThread();
-                
-                InitializeTrayIcon();
-                
-                await Task.WhenAll(
-                    RegisterStartupTaskAsync(),
-                    InitializeServicesAsync()
-                );
 
-                // Create the main window instance but don't show it yet.
+                SettingsService = new SettingsService();
+
+                var currentVersion = GetAppVersion();
+                var lastRunVersion = SettingsService.CurrentSettings.LastRunAppVersion;
+
+                bool isNewVersion = currentVersion != lastRunVersion;
+                if (isNewVersion && SettingsService.CurrentSettings.RestoreDeletedPacksOnUpdate)
+                {
+                    await CopyDefaultSoundPacksAsync(forceCopy: true);
+                }
+                else
+                {
+                    await CopyDefaultSoundPacksAsync(forceCopy: false);
+                }
+
+                if (isNewVersion)
+                {
+                    SettingsService.CurrentSettings.LastRunAppVersion = currentVersion;
+                    SettingsService.SaveSettings(SettingsService.CurrentSettings);
+                }
+
+                var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
+                KeyboardSoundService = new KeyboardSoundService(soundPackDir);
+                KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
+                // The SoundPackChanged event is no longer needed here
+                // SettingsService.SoundPackChanged += OnSoundPackChanged;
+
+                InitializeTrayIcon();
+
+                if (_toggleEnabledMenuItem != null)
+                {
+                    KeyboardSoundService.IsEnabled = SettingsService.CurrentSettings.IsEnabled;
+                    _toggleEnabledMenuItem.IsChecked = KeyboardSoundService.IsEnabled;
+                }
+
+                await RegisterStartupTaskAsync();
+
                 _window = new MainWindow();
+                MainWindow = _window as MainWindow;
                 _window.Closed += (s, e) =>
                 {
                     if (_handleWindowClosed)
@@ -61,11 +89,9 @@ namespace Mechanical_Keyboard
                     }
                 };
 
-                // Use the AppLifecycle API to check the activation kind
                 var appActivationArguments = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
                 if (appActivationArguments.Kind == ExtendedActivationKind.StartupTask)
                 {
-                    // If launched from startup, minimize the window.
                     var hWnd = WindowNative.GetWindowHandle(_window);
                     var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
                     var appWindow = AppWindow.GetFromWindowId(windowId);
@@ -76,7 +102,6 @@ namespace Mechanical_Keyboard
                 }
                 else
                 {
-                    // If launched normally (e.g., from Start Menu), activate and show the window.
                     _window.Activate();
                     _window.GetAppWindow().Show();
                 }
@@ -86,6 +111,32 @@ namespace Mechanical_Keyboard
                 Debug.WriteLine($"[FATAL] Unhandled exception in OnLaunched: {ex}");
                 if (Debugger.IsAttached) Debugger.Break();
             }
+        }
+
+        private static async Task CopyDefaultSoundPacksAsync(bool forceCopy)
+        {
+            await Task.Run(() =>
+            {
+                var sourcePacksDir = Path.Combine(AppContext.BaseDirectory, "Assets", "SoundPacks");
+                var destPacksDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Mechanical Keyboard", "SoundPacks");
+
+                if (!Directory.Exists(sourcePacksDir)) return;
+
+                foreach (var sourceDir in Directory.GetDirectories(sourcePacksDir))
+                {
+                    var packName = Path.GetFileName(sourceDir);
+                    var destDir = Path.Combine(destPacksDir, packName);
+
+                    if (!Directory.Exists(destDir) || forceCopy)
+                    {
+                        if (Directory.Exists(destDir))
+                        {
+                            Directory.Delete(destDir, true);
+                        }
+                        CopyDirectory(sourceDir, destDir);
+                    }
+                }
+            });
         }
 
         private void InitializeTrayIcon()
@@ -119,48 +170,16 @@ namespace Mechanical_Keyboard
             _trayIcon.ForceCreate();
         }
 
-        private async Task InitializeServicesAsync()
+        // This event handler is no longer needed
+        /*
+        private void OnSoundPackChanged(object? sender, EventArgs e)
         {
-            await Task.Run(() =>
-            {
-                SettingsService = new SettingsService();
-                SettingsService.SoundPackChanged += OnSoundPackChanged;
+            if (KeyboardSoundService == null || SettingsService == null) return;
 
-                var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
-                KeyboardSoundService = new KeyboardSoundService(soundPackDir);
-            });
-
-            if (KeyboardSoundService != null)
-            {
-                KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
-
-                DispatcherQueue?.TryEnqueue(() =>
-                {
-                    if (KeyboardSoundService != null && _toggleEnabledMenuItem != null)
-                    {
-                        KeyboardSoundService.IsEnabled = SettingsService!.CurrentSettings.IsEnabled;
-                        _toggleEnabledMenuItem.IsChecked = KeyboardSoundService.IsEnabled;
-                    }
-                });
-            }
+            var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
+            KeyboardSoundService.ReloadSoundPack(soundPackDir);
         }
-
-        private async void OnSoundPackChanged(object? sender, EventArgs e)
-        {
-            KeyboardSoundService?.Dispose();
-
-            await Task.Run(() =>
-            {
-                var soundPackDir = SettingsService!.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
-                KeyboardSoundService = new KeyboardSoundService(soundPackDir);
-            });
-
-            if (KeyboardSoundService != null)
-            {
-                KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
-                KeyboardSoundService.IsEnabled = SettingsService!.CurrentSettings.IsEnabled;
-            }
-        }
+        */
 
         private void KeyboardSoundService_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -172,7 +191,6 @@ namespace Mechanical_Keyboard
 
         private void ShowSettingsWindow()
         {
-            // This method ensures the window is visible and activated.
             if (_window != null)
             {
                 _window.Activate();
@@ -207,17 +225,14 @@ namespace Mechanical_Keyboard
 
         private static async Task RegisterStartupTaskAsync()
         {
-            // This logic only runs ONCE in the application's lifetime.
             if (SettingsService != null && SettingsService.CurrentSettings.IsFirstRun)
             {
                 var startupTask = await StartupTask.GetAsync("MechanicalKeyboardAutoStart");
                 if (startupTask.State == StartupTaskState.Disabled)
                 {
-                    // Request to enable the task on first run.
                     await startupTask.RequestEnableAsync();
                 }
 
-                // Mark first run as complete and save the setting.
                 SettingsService.CurrentSettings.IsFirstRun = false;
                 SettingsService.SaveSettings(SettingsService.CurrentSettings);
             }
@@ -230,6 +245,39 @@ namespace Mechanical_Keyboard
                 return WindowNative.GetWindowHandle(app._window);
             }
             return IntPtr.Zero;
+        }
+
+        private static string GetAppVersion()
+        {
+            try
+            {
+                var version = Package.Current.Id.Version;
+                return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+            }
+            catch
+            {
+                return "0.0.0.0-dev";
+            }
+        }
+
+        private static void CopyDirectory(string sourceDir, string destinationDir)
+        {
+            var dir = new DirectoryInfo(sourceDir);
+            if (!dir.Exists) return;
+
+            Directory.CreateDirectory(destinationDir);
+
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                file.CopyTo(targetFilePath, true);
+            }
+
+            foreach (DirectoryInfo subDir in dir.GetDirectories())
+            {
+                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                CopyDirectory(subDir.FullName, newDestinationDir);
+            }
         }
     }
 }

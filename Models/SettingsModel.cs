@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Mechanical_Keyboard.Models
 {
@@ -8,9 +9,17 @@ namespace Mechanical_Keyboard.Models
         public double Volume { get; set; } = 1.0;
         public string SoundPackName { get; set; } = "Default";
         public bool IsFirstRun { get; set; } = true;
+
+        // Properties for pack restoration and version tracking
+        public bool RestoreDeletedPacksOnUpdate { get; set; } = true;
+        public string LastRunAppVersion { get; set; } = "0.0.0";
+
+        // Property for custom FFmpeg path
+        public string? FFmpegPath { get; set; }
     }
 
     [JsonSerializable(typeof(SettingsModel))]
+    [JsonSerializable(typeof(List<string>))]
     internal partial class SettingsJsonContext : JsonSerializerContext
     {
     }

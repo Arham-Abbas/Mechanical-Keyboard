@@ -1,4 +1,5 @@
 {
   "DisplayName": "Default",
-  "Description": "The classic mechanical keyboard sound."
+  "Description": "The classic mechanical keyboard sound.",
+  "HasPitchVariants": true
 }
