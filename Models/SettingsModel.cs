@@ -13,6 +13,7 @@ namespace Mechanical_Keyboard.Models
         // Properties for pack restoration and version tracking
         public bool RestoreDeletedPacksOnUpdate { get; set; } = true;
         public string LastRunAppVersion { get; set; } = "0.0.0";
+        public List<string> DeletedDefaultPacks { get; set; } = [];
 
         // Property for custom FFmpeg path
         public string? FFmpegPath { get; set; }

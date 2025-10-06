@@ -94,7 +94,7 @@ namespace Mechanical_Keyboard.Services
             var packInfo = new SoundPackInfo
             {
                 DisplayName = model.PackName,
-                Description = model.Description ?? string.Empty,
+                Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description,
                 CoverImage = string.IsNullOrEmpty(model.IconSourcePath) ? string.Empty : iconFileName,
                 HasPitchVariants = model.GeneratePitchVariants
             };
@@ -245,35 +245,21 @@ namespace Mechanical_Keyboard.Services
             return Path.Combine(_soundPacksFolderPath, "Default");
         }
 
-        public async Task<string?> ImportSoundPackAsync(string sourceFolderPath)
-        {
-            if (!File.Exists(Path.Combine(sourceFolderPath, "key-press.wav")))
-            {
-                Debug.WriteLine("[ERROR] Import failed: Source folder does not contain a 'key-press.wav'.");
-                return null;
-            }
-
-            var newPackName = new DirectoryInfo(sourceFolderPath).Name;
-            var destinationPath = Path.Combine(_soundPacksFolderPath, newPackName);
-
-            if (Directory.Exists(destinationPath))
-            {
-                // For now, we will not allow overwriting existing packs via this method.
-                // The new dialog will handle this logic gracefully.
-                Debug.WriteLine($"[ERROR] Import failed: A sound pack named '{newPackName}' already exists.");
-                return null;
-            }
-            
-            await Task.Run(() => CopyDirectory(sourceFolderPath, destinationPath));
-
-            return newPackName;
-        }
-
         public async Task DeleteSoundPackAsync(SoundPackInfo packToDelete)
         {
             if (!Directory.Exists(packToDelete.PackDirectory)) return;
 
             await Task.Run(() => Directory.Delete(packToDelete.PackDirectory, true));
+
+            // If the deleted pack was a default pack, add it to the deleted list to prevent it from being restored on next launch.
+            if (packToDelete.IsDefault)
+            {
+                if (!CurrentSettings.DeletedDefaultPacks.Contains(packToDelete.DisplayName))
+                {
+                    CurrentSettings.DeletedDefaultPacks.Add(packToDelete.DisplayName);
+                    SaveSettings(CurrentSettings);
+                }
+            }
         }
 
         public SettingsModel LoadSettings()

@@ -49,6 +49,9 @@ namespace Mechanical_Keyboard
                 bool isNewVersion = currentVersion != lastRunVersion;
                 if (isNewVersion && SettingsService.CurrentSettings.RestoreDeletedPacksOnUpdate)
                 {
+                    // On update, clear the deleted list to force restore all default packs
+                    SettingsService.CurrentSettings.DeletedDefaultPacks.Clear();
+                    SettingsService.SaveSettings(SettingsService.CurrentSettings);
                     await CopyDefaultSoundPacksAsync(forceCopy: true);
                 }
                 else
@@ -62,18 +65,50 @@ namespace Mechanical_Keyboard
                     SettingsService.SaveSettings(SettingsService.CurrentSettings);
                 }
 
-                var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
-                KeyboardSoundService = new KeyboardSoundService(soundPackDir);
-                KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
-                // The SoundPackChanged event is no longer needed here
-                // SettingsService.SoundPackChanged += OnSoundPackChanged;
+                // --- Robust Service Initialization ---
+                try
+                {
+                    var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
+                    KeyboardSoundService = new KeyboardSoundService(soundPackDir);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ERROR] Initial sound pack failed to load: {ex.Message}. Attempting to fall back to 'Default'.");
+                    try
+                    {
+                        var fallbackDir = SettingsService.GetSoundPackDirectory("Default");
+                        KeyboardSoundService = new KeyboardSoundService(fallbackDir);
+                        SettingsService.CurrentSettings.SoundPackName = "Default";
+                        SettingsService.SaveSettings(SettingsService.CurrentSettings);
+                    }
+                    catch (Exception fallbackEx)
+                    {
+                        Debug.WriteLine($"[FATAL] Fallback 'Default' sound pack also failed to load: {fallbackEx.Message}. The sound service will be disabled.");
+                        KeyboardSoundService = null; // Ensure service is null
+                    }
+                }
+                // --- End Robust Service Initialization ---
+
+                if (KeyboardSoundService != null)
+                {
+                    KeyboardSoundService.PropertyChanged += KeyboardSoundService_PropertyChanged;
+                }
 
                 InitializeTrayIcon();
 
                 if (_toggleEnabledMenuItem != null)
                 {
-                    KeyboardSoundService.IsEnabled = SettingsService.CurrentSettings.IsEnabled;
-                    _toggleEnabledMenuItem.IsChecked = KeyboardSoundService.IsEnabled;
+                    if (KeyboardSoundService != null)
+                    {
+                        KeyboardSoundService.IsEnabled = SettingsService.CurrentSettings.IsEnabled;
+                        _toggleEnabledMenuItem.IsChecked = KeyboardSoundService.IsEnabled;
+                    }
+                    else
+                    {
+                        // If service failed to load, ensure UI reflects this disabled state
+                        _toggleEnabledMenuItem.IsChecked = false;
+                        _toggleEnabledMenuItem.IsEnabled = false;
+                    }
                 }
 
                 await RegisterStartupTaskAsync();
@@ -120,12 +155,18 @@ namespace Mechanical_Keyboard
                 var sourcePacksDir = Path.Combine(AppContext.BaseDirectory, "Assets", "SoundPacks");
                 var destPacksDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Mechanical Keyboard", "SoundPacks");
 
-                if (!Directory.Exists(sourcePacksDir)) return;
+                if (!Directory.Exists(sourcePacksDir) || SettingsService == null) return;
 
                 foreach (var sourceDir in Directory.GetDirectories(sourcePacksDir))
                 {
                     var packName = Path.GetFileName(sourceDir);
                     var destDir = Path.Combine(destPacksDir, packName);
+
+                    // Don't copy if the user has explicitly deleted this default pack, unless we are forcing a restore.
+                    if (!forceCopy && SettingsService.CurrentSettings.DeletedDefaultPacks.Contains(packName))
+                    {
+                        continue;
+                    }
 
                     if (!Directory.Exists(destDir) || forceCopy)
                     {
@@ -169,17 +210,6 @@ namespace Mechanical_Keyboard
             _trayIcon.ContextFlyout = menu;
             _trayIcon.ForceCreate();
         }
-
-        // This event handler is no longer needed
-        /*
-        private void OnSoundPackChanged(object? sender, EventArgs e)
-        {
-            if (KeyboardSoundService == null || SettingsService == null) return;
-
-            var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
-            KeyboardSoundService.ReloadSoundPack(soundPackDir);
-        }
-        */
 
         private void KeyboardSoundService_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {

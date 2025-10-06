@@ -7,7 +7,7 @@ namespace Mechanical_Keyboard.Models
     {
         // These properties are loaded directly from pack.json
         public string DisplayName { get; set; } = "Unknown Pack";
-        public string Description { get; set; } = string.Empty;
+        public string? Description { get; set; }
         public string CoverImage { get; set; } = string.Empty;
         public bool HasPitchVariants { get; set; } = true;
 

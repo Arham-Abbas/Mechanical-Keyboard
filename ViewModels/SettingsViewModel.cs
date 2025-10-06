@@ -179,7 +179,7 @@ namespace Mechanical_Keyboard.ViewModels
             _selectedSoundPack = SoundPacks.FirstOrDefault(p => p.DisplayName == _settingsService.CurrentSettings.SoundPackName);
             CheckServiceState();
 
-            InitializeAsync();
+            _ = RefreshStartupTaskStateAsync();
 
             if (App.KeyboardSoundService != null)
             {
@@ -191,11 +191,6 @@ namespace Mechanical_Keyboard.ViewModels
                     }
                 };
             }
-        }
-
-        private async void InitializeAsync()
-        {
-            await RefreshStartupTaskStateAsync();
         }
 
         public async Task RefreshStartupTaskStateAsync()

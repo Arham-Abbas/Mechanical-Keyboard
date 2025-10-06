@@ -4,13 +4,16 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Mechanical_Keyboard.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:Mechanical_Keyboard.Models"
+    xmlns:vm="using:Mechanical_Keyboard.ViewModels"
     mc:Ignorable="d"
-    x:Name="SettingsPageRoot"> <!-- Give the page a name for element binding -->
+    x:Name="SettingsPageRoot">
+    <!-- Give the page a name for element binding -->
 
     <Page.DataContext>
-        <vm:SettingsViewModel xmlns:vm="using:Mechanical_Keyboard.ViewModels"/>
+        <vm:SettingsViewModel />
     </Page.DataContext>
 
     <Page.Resources>
@@ -38,8 +41,10 @@
         <DataTemplate x:Key="SoundPackListTemplate" x:DataType="models:SoundPackInfo">
             <Grid ToolTipService.ToolTip="{x:Bind Description}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/> <!-- Column for the button -->
-                    <ColumnDefinition Width="*"/>    <!-- Column for the text -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Column for the button -->
+                    <ColumnDefinition Width="*"/>
+                    <!-- Column for the text -->
                 </Grid.ColumnDefinitions>
 
                 <!-- Preview Button for ListView  -->
@@ -50,7 +55,7 @@
                         Margin="0,0,8,0">
                     <FontIcon Glyph="&#xE768;" FontSize="16"/>
                 </Button>
-                
+
                 <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" VerticalAlignment="Center" Margin="0,4"/>
             </Grid>
         </DataTemplate>
@@ -58,7 +63,7 @@
 
     <ScrollViewer>
         <StackPanel Margin="24" Spacing="24" >
-            
+
             <!-- General Settings Section -->
             <StackPanel Spacing="12">
                 <TextBlock Text="General" Style="{ThemeResource TitleTextBlockStyle}" />
@@ -126,7 +131,6 @@
                     Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay}">
                 </ListView>
             </StackPanel>
-            
         </StackPanel>
     </ScrollViewer>
 </Page>

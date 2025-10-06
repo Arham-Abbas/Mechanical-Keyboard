@@ -4,18 +4,46 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Mechanical_Keyboard.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:Mechanical_Keyboard.ViewModels"
     mc:Ignorable="d">
 
-<Grid>
-    <StackPanel Margin="24" Spacing="12" MaxWidth="600" HorizontalAlignment="Left">
-      <TextBlock Text="Mechanical Keyboard" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-      <TextBlock Text="{x:Bind AppVersion, Mode=OneTime}" Style="{ThemeResource BodyTextBlockStyle}"/>
-      <TextBlock Text="Created by Arham" Style="{ThemeResource BodyTextBlockStyle}"/>
-      <TextBlock Text="A lightweight app that provides mechanical keyboard sound emulation." 
-                 Style="{ThemeResource BodyTextBlockStyle}" 
-                 TextWrapping="Wrap"
-                 Margin="0,12,0,0"/>
-    </StackPanel>
-  </Grid>
+    <Page.DataContext>
+        <vm:AboutViewModel />
+    </Page.DataContext>
+
+    <ScrollViewer>
+        <StackPanel Padding="48" Spacing="16" MaxWidth="600" HorizontalAlignment="Left">
+            <Grid ColumnSpacing="24" 
+                  Padding="24"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
+                  BorderThickness="1" 
+                  CornerRadius="{ThemeResource ControlCornerRadius}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <PersonPicture Grid.Column="0"
+                               ProfilePicture="{x:Bind ViewModel.GitHubAvatarSource, Mode=OneWay}" 
+                               DisplayName="Arham Abbas" 
+                               Height="96" 
+                               Width="96"
+                               VerticalAlignment="Top"/>
+
+                <StackPanel Grid.Column="1" Spacing="12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Created by Arham Abbas" Style="{ThemeResource SubtitleTextBlockStyle}"/>
+                        <TextBlock Text="{x:Bind ViewModel.GitHubBio, Mode=OneWay}" TextWrapping="Wrap" Style="{ThemeResource BodyTextBlockStyle}"/>
+                    </StackPanel>
+                    <StackPanel Spacing="0">
+                        <HyperlinkButton Content="View Project on GitHub" NavigateUri="{x:Bind helpers:AppInfo.GitHubRepoUri}" HorizontalAlignment="Left"/>
+                        <HyperlinkButton Content="Report a Bug" NavigateUri="{x:Bind helpers:AppInfo.GitHubIssuesUri}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind helpers:AppInfo.Version}" Style="{ThemeResource CaptionTextBlockStyle}" Opacity="0.7"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </Page>

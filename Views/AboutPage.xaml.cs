@@ -1,17 +1,5 @@
-using Microsoft.UI.Xaml;
+using Mechanical_Keyboard.ViewModels;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.ApplicationModel;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -25,6 +13,8 @@ namespace Mechanical_Keyboard.Views
     public sealed partial class AboutPage : Page
     {
         public string AppVersion { get; }
+
+        public AboutViewModel ViewModel => (AboutViewModel)DataContext;
 
         public AboutPage()
         {

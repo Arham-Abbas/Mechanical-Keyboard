@@ -82,7 +82,9 @@ namespace Mechanical_Keyboard.Services
             }
             else
             {
-                Debug.WriteLine($"[ERROR] Audio engine not initialized because no sounds were loaded from '{soundPackDirectory}'.");
+                // This constructor will now throw if initialization fails,
+                // so this else block is for safety but should not be hit.
+                throw new InvalidOperationException($"Audio engine could not be initialized because no sounds were loaded from '{soundPackDirectory}'.");
             }
         }
 
@@ -115,6 +117,11 @@ namespace Mechanical_Keyboard.Services
                     catch (Exception ex)
                     {
                         Debug.WriteLine($"[ERROR] Failed to load sound file '{filePath}': {ex.Message}");
+                        // If the essential key-press sound is corrupt, we must fail loudly.
+                        if (name == "key-press")
+                        {
+                            throw new InvalidDataException($"The essential sound file '{filePath}' is corrupted or invalid.", ex);
+                        }
                     }
                 }
                 else
@@ -125,8 +132,7 @@ namespace Mechanical_Keyboard.Services
 
             if (!rawSounds.TryGetValue("key-press", out var baseSound))
             {
-                Debug.WriteLine($"[ERROR] Could not load base 'key-press.wav' from '{directory}'. Sound pack loading failed.");
-                return;
+                throw new FileNotFoundException($"Could not load base 'key-press.wav' from '{directory}'. The sound pack is invalid.");
             }
 
             // Use the loaded setting to determine the number of variants.
