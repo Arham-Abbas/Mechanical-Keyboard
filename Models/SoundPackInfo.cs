@@ -1,12 +1,17 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text.Json.Serialization;
 
 namespace Mechanical_Keyboard.Models
 {
-    public class SoundPackInfo
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSerializable(typeof(SoundPackInfo))]
+    public partial class SoundPackInfoJsonContext : JsonSerializerContext { }
+
+    public class SoundPackInfo : IEquatable<SoundPackInfo>
     {
         // These properties are loaded directly from pack.json
-        public string DisplayName { get; set; } = "Unknown Pack";
+        public string DisplayName { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string CoverImage { get; set; } = string.Empty;
         public bool HasPitchVariants { get; set; } = true;
@@ -25,22 +30,32 @@ namespace Mechanical_Keyboard.Models
         {
             get
             {
-                if (!string.IsNullOrEmpty(CoverImage) && !string.IsNullOrEmpty(PackDirectory))
+                var customImagePath = Path.Combine(PackDirectory, CoverImage);
+                if (!string.IsNullOrEmpty(CoverImage) && File.Exists(customImagePath))
                 {
-                    var customImagePath = Path.Combine(PackDirectory, CoverImage);
-                    if (File.Exists(customImagePath))
-                    {
-                        return customImagePath;
-                    }
+                    return customImagePath;
                 }
-                // Fallback to the default app icon if no custom image is found.
+                // Fallback to a default placeholder image if no cover image is found.
                 return "ms-appx:///Assets/Square44x44Logo.scale-200.png";
             }
         }
-    }
 
-    [JsonSerializable(typeof(SoundPackInfo))]
-    internal partial class SoundPackInfoJsonContext : JsonSerializerContext
-    {
+        // IEquatable implementation
+        public bool Equals(SoundPackInfo? other)
+        {
+            if (other is null) return false;
+            // Two packs are the same if they point to the same directory.
+            return PackDirectory == other.PackDirectory;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return Equals(obj as SoundPackInfo);
+        }
+
+        public override int GetHashCode()
+        {
+            return PackDirectory.GetHashCode();
+        }
     }
 }

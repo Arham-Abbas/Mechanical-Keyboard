@@ -128,34 +128,32 @@ namespace Mechanical_Keyboard.ViewModels
 
         public void OnSoundPackSelected(SoundPackInfo? pack)
         {
-            // If the requested pack is null or already selected, do nothing.
-            if (pack == null || pack == _selectedSoundPack)
+            if (pack == _selectedSoundPack)
             {
                 return;
             }
 
+            // Handle the case where no pack is selected (e.g., after deleting the last one)
+            if (pack == null)
+            {
+                App.KeyboardSoundService?.ClearSoundCache();
+                _settingsService.CurrentSettings.SoundPackDirectory = string.Empty;
+                _settingsService.SaveSettings(_settingsService.CurrentSettings);
+                SelectedSoundPack = null;
+                return;
+            }
+
             // --- Validation and State Change ---
-            // This is where you could add logic to check if a pack is corrupt.
-            // For now, we assume the reload is successful.
             try
             {
-                // 1. Command the service to reload with the new pack.
                 App.KeyboardSoundService?.ReloadSoundPack(pack);
-
-                // 2. Persist the new setting.
                 _settingsService.CurrentSettings.SoundPackDirectory = pack.PackDirectory;
                 _settingsService.SaveSettings(_settingsService.CurrentSettings);
-
-                // 3. If successful, update the authoritative property.
-                // This will notify the UI to update its selection state.
                 SelectedSoundPack = pack;
             }
             catch (Exception ex)
             {
-                // If ReloadSoundPack fails, the SelectedSoundPack property is never set,
-                // and the UI's selection will automatically revert because of the OneWay binding.
                 Debug.WriteLine($"[ERROR] Failed to switch to sound pack '{pack.DisplayName}': {ex.Message}");
-                // Optionally, show a dialog to the user here.
             }
         }
 
@@ -226,7 +224,7 @@ namespace Mechanical_Keyboard.ViewModels
                     }
                 };
             }
-            
+
             // Set the flag to true only after all setup is complete.
             IsInitialized = true;
         }
@@ -277,7 +275,7 @@ namespace Mechanical_Keyboard.ViewModels
                     SoundPackGroups.Add(group);
                 }
             }
-            
+
             OnPropertyChanged(nameof(HasCustomPacks));
             CheckServiceState();
         }
@@ -369,13 +367,34 @@ namespace Mechanical_Keyboard.ViewModels
             await _settingsService.DeleteSoundPackAsync(packToDelete);
             LoadSoundPacks();
 
+            // After deleting, select the first available pack, or null if none exist.
             OnSoundPackSelected(_allSoundPacksFlat.FirstOrDefault());
         }
 
         private void RestoreDefaultPacks()
         {
+            var previouslySelectedPackDir = SelectedSoundPack?.PackDirectory;
+
             _settingsService.RestoreDefaultPacks();
             LoadSoundPacks();
+
+            if (previouslySelectedPackDir != null)
+            {
+                // Find the equivalent pack in the new list and set it.
+                var packToReselect = _allSoundPacksFlat.FirstOrDefault(p => p.PackDirectory == previouslySelectedPackDir);
+                SelectedSoundPack = packToReselect;
+            }
+
+            // If nothing was selected before, or the old selection is gone, select the first available.
+            if (SelectedSoundPack == null)
+            {
+                OnSoundPackSelected(_allSoundPacksFlat.FirstOrDefault());
+            }
+            else
+            {
+                // If the selection is still valid, just notify the UI to re-sync.
+                OnPropertyChanged(nameof(SelectedSoundPack));
+            }
         }
 
         private static void PreviewSoundPack(SoundPackInfo? pack)

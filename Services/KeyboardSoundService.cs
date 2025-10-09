@@ -60,43 +60,55 @@ namespace Mechanical_Keyboard.Services
 
         private unsafe delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-        public KeyboardSoundService(SoundPackInfo initialPack)
+        public KeyboardSoundService(SoundPackInfo? initialPack)
         {
             _proc = HookCallback;
-            LoadSoundPack(initialPack);
 
-            if (_soundMap.Count > 0)
+            // The playback device and mixer are always created, even if no pack is loaded initially.
+            // This prevents having to tear down and recreate the audio pipeline.
+            _playbackDevice = new WaveOutEvent { DesiredLatency = 75, NumberOfBuffers = 2 };
+            _mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 1)) { ReadFully = true };
+            _volumeProvider = new VolumeSampleProvider(_mixer);
+
+            if (App.SettingsService != null)
             {
-                var waveFormat = _soundMap.First().Value.WaveFormat;
-                _playbackDevice = new WaveOutEvent { DesiredLatency = 75, NumberOfBuffers = 2 };
-                _mixer = new MixingSampleProvider(waveFormat) { ReadFully = true };
-                _volumeProvider = new VolumeSampleProvider(_mixer);
-
-                if (App.SettingsService != null)
-                {
-                    Volume = App.SettingsService.CurrentSettings.Volume;
-                }
-
-                _playbackDevice.Init(_volumeProvider);
-                _playbackDevice.Play();
+                Volume = App.SettingsService.CurrentSettings.Volume;
             }
-            else
+
+            _playbackDevice.Init(_volumeProvider);
+            _playbackDevice.Play();
+
+            // Now, load the initial pack if one was provided.
+            if (initialPack != null)
             {
-                throw new InvalidOperationException($"Audio engine could not be initialized because no sounds were loaded from '{initialPack.PackDirectory}'.")
-                ;
+                ReloadSoundPack(initialPack);
             }
         }
 
-        public void ReloadSoundPack(SoundPackInfo newPack)
+        public void ReloadSoundPack(SoundPackInfo? newPack)
         {
+            if (newPack == null)
+            {
+                ClearSoundCache();
+                Debug.WriteLine("Sound cache cleared. No pack is loaded.");
+                return;
+            }
+
             Debug.WriteLine($"Reloading sound pack from: {newPack.PackDirectory}");
             LoadSoundPack(newPack);
+        }
+
+        public void ClearSoundCache()
+        {
+            // This method clears the sound map, effectively silencing the service
+            // without destroying the audio pipeline (_mixer, _playbackDevice).
+            _soundMap.Clear();
         }
 
         private void LoadSoundPack(SoundPackInfo pack)
         {
             _soundMap.Clear();
-            
+
             var directory = pack.PackDirectory;
             bool hasPitchVariants = pack.HasPitchVariants;
 
@@ -135,19 +147,19 @@ namespace Mechanical_Keyboard.Services
             var standardKeyPool = new SoundVariantPool(baseSound, variantCount);
 
             var keyMappings = new Dictionary<string, int[]>
-            {
-                { "space-press", [0x20] },
-                { "enter-press", [0x0D] },
-                { "backspace-press", [0x08] },
-                { "modifier-press", [0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5] }
-            };
+                {
+                    { "space-press", [0x20] },
+                    { "enter-press", [0x0D] },
+                    { "backspace-press", [0x08] },
+                    { "modifier-press", [0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5] }
+                };
 
             foreach (var mapping in keyMappings)
             {
                 var soundName = mapping.Key;
                 var keyCodes = mapping.Value;
-                
-                SoundVariantPool poolToUse = rawSounds.TryGetValue(soundName, out var specialSound) 
+
+                SoundVariantPool poolToUse = rawSounds.TryGetValue(soundName, out var specialSound)
                     ? new SoundVariantPool(specialSound, 1)
                     : standardKeyPool;
 
@@ -193,7 +205,7 @@ namespace Mechanical_Keyboard.Services
             {
                 Debug.WriteLine($"[FATAL] Unhandled exception in keyboard hook: {ex}");
             }
-            
+
             return CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
 
