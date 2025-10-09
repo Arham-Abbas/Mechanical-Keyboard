@@ -10,13 +10,18 @@
     xmlns:vm="using:Mechanical_Keyboard.ViewModels"
     mc:Ignorable="d"
     x:Name="SettingsPageRoot">
-    <!-- Give the page a name for element binding -->
 
     <Page.DataContext>
         <vm:SettingsViewModel />
     </Page.DataContext>
 
     <Page.Resources>
+        <helpers:InvertedBooleanToOpacityConverter x:Key="InvertedBooleanToOpacityConverter"/>
+        <helpers:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <!-- Grouping logic for the sound packs -->
+        <CollectionViewSource x:Name="GroupedSoundPacks" Source="{x:Bind ViewModel.SoundPackGroups, Mode=OneWay}" IsSourceGrouped="true"/>
+
         <!-- DataTemplate for the GridView items -->
         <DataTemplate x:Key="SoundPackGridTemplate" x:DataType="models:SoundPackInfo">
             <StackPanel Padding="8" Spacing="8" Width="160" ToolTipService.ToolTip="{x:Bind Description}">
@@ -27,7 +32,6 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{x:Bind DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                    <!-- Preview Button for GridView -->
                     <Button Grid.Column="1" 
                             Click="PreviewButton_Click"
                             Style="{ThemeResource SubtleButtonStyle}">
@@ -42,12 +46,8 @@
             <Grid ToolTipService.ToolTip="{x:Bind Description}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <!-- Column for the button -->
                     <ColumnDefinition Width="*"/>
-                    <!-- Column for the text -->
                 </Grid.ColumnDefinitions>
-
-                <!-- Preview Button for ListView  -->
                 <Button Grid.Column="0" 
                         Click="PreviewButton_Click"
                         Style="{ThemeResource SubtleButtonStyle}"
@@ -55,7 +55,6 @@
                         Margin="0,0,8,0">
                     <FontIcon Glyph="&#xE768;" FontSize="16"/>
                 </Button>
-
                 <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" VerticalAlignment="Center" Margin="0,4"/>
             </Grid>
         </DataTemplate>
@@ -98,38 +97,79 @@
                     </StackPanel>
                 </Grid>
 
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Command="{x:Bind ViewModel.ImportSoundPackCommand}" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
+                    <Button Command="{x:Bind ViewModel.ImportSoundPackCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE8B5;" />
                             <TextBlock Text="Import Sound Pack"/>
                         </StackPanel>
                     </Button>
-                    <Button Command="{x:Bind ViewModel.DeleteSoundPackCommand}" HorizontalAlignment="Left" Style="{ThemeResource AccentButtonStyle}">
+                    <Button Command="{x:Bind ViewModel.DeleteSoundPackCommand}" Style="{ThemeResource AccentButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE74D;" />
-                            <TextBlock Text="Delete Selected Pack"/>
+                            <TextBlock Text="Delete/Hide Selected Pack"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{x:Bind ViewModel.RestoreDefaultPacksCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE7A7;"/>
+                            <TextBlock Text="Restore hidden packs"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
 
-                <!-- GridView for sound packs -->
+                <!-- Simplified GridView with Grouping -->
                 <GridView
-                    ItemsSource="{x:Bind ViewModel.SoundPacks}"
-                    SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=TwoWay}"
+                    ItemsSource="{x:Bind GroupedSoundPacks.View, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=OneWay}"
+                    SelectionChanged="SoundPack_SelectionChanged"
                     SelectionMode="Single"
                     ItemTemplate="{StaticResource SoundPackGridTemplate}"
                     Visibility="{x:Bind ViewModel.IsGridView, Mode=OneWay}">
+                    <GridView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="vm:SoundPackGroup">
+                                    <TextBlock Text="{x:Bind Key}" Style="{ThemeResource SubtitleTextBlockStyle}" Margin="1,0,0,6"/>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                            <GroupStyle.ContainerStyle>
+                                <Style TargetType="GroupItem">
+                                    <Setter Property="Margin" Value="0,0,0,24"/>
+                                </Style>
+                            </GroupStyle.ContainerStyle>
+                        </GroupStyle>
+                    </GridView.GroupStyle>
                 </GridView>
 
-                <!-- ListView for sound packs -->
+                <!-- Simplified ListView with Grouping -->
                 <ListView
-                    ItemsSource="{x:Bind ViewModel.SoundPacks}"
-                    SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=TwoWay}"
+                    ItemsSource="{x:Bind GroupedSoundPacks.View, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.SelectedSoundPack, Mode=OneWay}"
+                    SelectionChanged="SoundPack_SelectionChanged"
                     SelectionMode="Single"
                     ItemTemplate="{StaticResource SoundPackListTemplate}"
                     Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay}">
+                    <ListView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="vm:SoundPackGroup">
+                                    <TextBlock Text="{x:Bind Key}" Style="{ThemeResource SubtitleTextBlockStyle}" Margin="1,4,0,4"/>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                            <GroupStyle.ContainerStyle>
+                                <Style TargetType="GroupItem">
+                                    <Setter Property="Margin" Value="0,0,0,12"/>
+                                </Style>
+                            </GroupStyle.ContainerStyle>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
                 </ListView>
+
+                <!-- Separator for ListView -->
+                <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Margin="0,12"
+                        Visibility="{x:Bind ViewModel.IsListView, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

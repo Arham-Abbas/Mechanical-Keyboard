@@ -15,7 +15,7 @@ using WinRT.Interop;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
-using System.IO;
+using System.Linq;
 
 namespace Mechanical_Keyboard
 {
@@ -35,7 +35,7 @@ namespace Mechanical_Keyboard
             InitializeComponent();
         }
 
-        protected override async void OnLaunched(LaunchActivatedEventArgs args)
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
             try
             {
@@ -43,24 +43,15 @@ namespace Mechanical_Keyboard
 
                 SettingsService = new SettingsService();
 
-                var currentVersion = GetAppVersion();
+                var currentVersion = Helpers.AppInfo.Version;
                 var lastRunVersion = SettingsService.CurrentSettings.LastRunAppVersion;
 
-                bool isNewVersion = currentVersion != lastRunVersion;
-                if (isNewVersion && SettingsService.CurrentSettings.RestoreDeletedPacksOnUpdate)
+                if (currentVersion != lastRunVersion)
                 {
-                    // On update, clear the deleted list to force restore all default packs
-                    SettingsService.CurrentSettings.DeletedDefaultPacks.Clear();
-                    SettingsService.SaveSettings(SettingsService.CurrentSettings);
-                    await CopyDefaultSoundPacksAsync(forceCopy: true);
-                }
-                else
-                {
-                    await CopyDefaultSoundPacksAsync(forceCopy: false);
-                }
-
-                if (isNewVersion)
-                {
+                    if (SettingsService.CurrentSettings.RestoreDeletedPacksOnUpdate)
+                    {
+                        SettingsService.CurrentSettings.DeletedDefaultPacks.Clear();
+                    }
                     SettingsService.CurrentSettings.LastRunAppVersion = currentVersion;
                     SettingsService.SaveSettings(SettingsService.CurrentSettings);
                 }
@@ -68,24 +59,30 @@ namespace Mechanical_Keyboard
                 // --- Robust Service Initialization ---
                 try
                 {
-                    var soundPackDir = SettingsService.GetSoundPackDirectory(SettingsService.CurrentSettings.SoundPackName);
-                    KeyboardSoundService = new KeyboardSoundService(soundPackDir);
+                    var allPacks = SettingsService.GetAvailableSoundPacks();
+                    var initialPack = allPacks.FirstOrDefault(p => p.PackDirectory == SettingsService.CurrentSettings.SoundPackDirectory)
+                                      ?? allPacks.FirstOrDefault();
+
+                    if (initialPack != null)
+                    {
+                        // Ensure the settings reflect the pack that is about to be loaded.
+                        if (SettingsService.CurrentSettings.SoundPackDirectory != initialPack.PackDirectory)
+                        {
+                            SettingsService.CurrentSettings.SoundPackDirectory = initialPack.PackDirectory;
+                            SettingsService.SaveSettings(SettingsService.CurrentSettings);
+                        }
+                        KeyboardSoundService = new KeyboardSoundService(initialPack);
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[FATAL] No sound packs found. The sound service will be disabled.");
+                        KeyboardSoundService = null;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[ERROR] Initial sound pack failed to load: {ex.Message}. Attempting to fall back to 'Default'.");
-                    try
-                    {
-                        var fallbackDir = SettingsService.GetSoundPackDirectory("Default");
-                        KeyboardSoundService = new KeyboardSoundService(fallbackDir);
-                        SettingsService.CurrentSettings.SoundPackName = "Default";
-                        SettingsService.SaveSettings(SettingsService.CurrentSettings);
-                    }
-                    catch (Exception fallbackEx)
-                    {
-                        Debug.WriteLine($"[FATAL] Fallback 'Default' sound pack also failed to load: {fallbackEx.Message}. The sound service will be disabled.");
-                        KeyboardSoundService = null; // Ensure service is null
-                    }
+                    Debug.WriteLine($"[FATAL] Sound service failed to initialize: {ex.Message}. The sound service will be disabled.");
+                    KeyboardSoundService = null;
                 }
                 // --- End Robust Service Initialization ---
 
@@ -105,13 +102,12 @@ namespace Mechanical_Keyboard
                     }
                     else
                     {
-                        // If service failed to load, ensure UI reflects this disabled state
                         _toggleEnabledMenuItem.IsChecked = false;
                         _toggleEnabledMenuItem.IsEnabled = false;
                     }
                 }
 
-                await RegisterStartupTaskAsync();
+                _ = RegisterStartupTaskAsync();
 
                 _window = new MainWindow();
                 MainWindow = _window as MainWindow;
@@ -146,38 +142,6 @@ namespace Mechanical_Keyboard
                 Debug.WriteLine($"[FATAL] Unhandled exception in OnLaunched: {ex}");
                 if (Debugger.IsAttached) Debugger.Break();
             }
-        }
-
-        private static async Task CopyDefaultSoundPacksAsync(bool forceCopy)
-        {
-            await Task.Run(() =>
-            {
-                var sourcePacksDir = Path.Combine(AppContext.BaseDirectory, "Assets", "SoundPacks");
-                var destPacksDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Mechanical Keyboard", "SoundPacks");
-
-                if (!Directory.Exists(sourcePacksDir) || SettingsService == null) return;
-
-                foreach (var sourceDir in Directory.GetDirectories(sourcePacksDir))
-                {
-                    var packName = Path.GetFileName(sourceDir);
-                    var destDir = Path.Combine(destPacksDir, packName);
-
-                    // Don't copy if the user has explicitly deleted this default pack, unless we are forcing a restore.
-                    if (!forceCopy && SettingsService.CurrentSettings.DeletedDefaultPacks.Contains(packName))
-                    {
-                        continue;
-                    }
-
-                    if (!Directory.Exists(destDir) || forceCopy)
-                    {
-                        if (Directory.Exists(destDir))
-                        {
-                            Directory.Delete(destDir, true);
-                        }
-                        CopyDirectory(sourceDir, destDir);
-                    }
-                }
-            });
         }
 
         private void InitializeTrayIcon()
@@ -241,10 +205,10 @@ namespace Mechanical_Keyboard
         private void ExitApplicationCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
         {
             _handleWindowClosed = false;
-            
+
             KeyboardSoundService?.Dispose();
             _trayIcon?.Dispose();
-            
+
             _window?.Close();
 
             if (_window == null)
@@ -275,39 +239,6 @@ namespace Mechanical_Keyboard
                 return WindowNative.GetWindowHandle(app._window);
             }
             return IntPtr.Zero;
-        }
-
-        private static string GetAppVersion()
-        {
-            try
-            {
-                var version = Package.Current.Id.Version;
-                return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-            }
-            catch
-            {
-                return "0.0.0.0-dev";
-            }
-        }
-
-        private static void CopyDirectory(string sourceDir, string destinationDir)
-        {
-            var dir = new DirectoryInfo(sourceDir);
-            if (!dir.Exists) return;
-
-            Directory.CreateDirectory(destinationDir);
-
-            foreach (FileInfo file in dir.GetFiles())
-            {
-                string targetFilePath = Path.Combine(destinationDir, file.Name);
-                file.CopyTo(targetFilePath, true);
-            }
-
-            foreach (DirectoryInfo subDir in dir.GetDirectories())
-            {
-                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                CopyDirectory(subDir.FullName, newDestinationDir);
-            }
         }
     }
 }

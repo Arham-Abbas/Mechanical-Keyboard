@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Mechanical_Keyboard.Models
@@ -7,7 +8,10 @@ namespace Mechanical_Keyboard.Models
     {
         public bool IsEnabled { get; set; } = true;
         public double Volume { get; set; } = 1.0;
-        public string SoundPackName { get; set; } = "Default";
+        
+        // The unambiguous way to store the selected pack, with a safe default.
+        public string SoundPackDirectory { get; set; } = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundPacks", "Default");
+
         public bool IsFirstRun { get; set; } = true;
 
         // Properties for pack restoration and version tracking

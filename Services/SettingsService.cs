@@ -188,24 +188,34 @@ namespace Mechanical_Keyboard.Services
             var soundPacks = new List<SoundPackInfo>();
             var defaultPacksPath = Path.Combine(AppContext.BaseDirectory, "Assets", "SoundPacks");
 
-            // All packs are now read from the single AppData location.
+            // 1. Load custom packs from the writable AppData folder.
             foreach (var dir in Directory.GetDirectories(_soundPacksFolderPath))
             {
-                var pack = LoadPackInfo(dir);
+                var pack = LoadPackInfo(dir, isDefault: false);
                 if (pack != null)
                 {
-                    // Determine if a pack is "default" by checking if a source folder exists for it.
-                    // This is a safe way to flag them without writing extra metadata.
-                    var sourcePackDir = Path.Combine(defaultPacksPath, Path.GetFileName(dir));
-                    pack.IsDefault = Directory.Exists(sourcePackDir);
                     soundPacks.Add(pack);
+                }
+            }
+
+            // 2. Load default packs from the read-only installation folder.
+            if (Directory.Exists(defaultPacksPath))
+            {
+                foreach (var dir in Directory.GetDirectories(defaultPacksPath))
+                {
+                    var pack = LoadPackInfo(dir, isDefault: true);
+                    // Only add default packs if the user has NOT "deleted" it.
+                    if (pack != null && !CurrentSettings.DeletedDefaultPacks.Contains(pack.DisplayName))
+                    {
+                        soundPacks.Add(pack);
+                    }
                 }
             }
 
             return soundPacks;
         }
 
-        private static SoundPackInfo? LoadPackInfo(string directoryPath)
+        private static SoundPackInfo? LoadPackInfo(string directoryPath, bool isDefault)
         {
             var metadataPath = Path.Combine(directoryPath, "pack.json");
             if (!File.Exists(metadataPath)) return null;
@@ -217,6 +227,7 @@ namespace Mechanical_Keyboard.Services
                 if (packInfo != null)
                 {
                     packInfo.PackDirectory = directoryPath;
+                    packInfo.IsDefault = isDefault;
                     if (string.IsNullOrWhiteSpace(packInfo.DisplayName))
                     {
                         packInfo.DisplayName = new DirectoryInfo(directoryPath).Name;
@@ -231,35 +242,31 @@ namespace Mechanical_Keyboard.Services
             }
         }
 
-        public string GetSoundPackDirectory(string packName)
-        {
-            // All packs now exist only in the AppData folder, simplifying this lookup.
-            var packPath = Path.Combine(_soundPacksFolderPath, packName);
-
-            if (Directory.Exists(packPath))
-            {
-                return packPath;
-            }
-
-            // Fallback to the default directory if the named pack isn't found
-            return Path.Combine(_soundPacksFolderPath, "Default");
-        }
-
         public async Task DeleteSoundPackAsync(SoundPackInfo packToDelete)
         {
-            if (!Directory.Exists(packToDelete.PackDirectory)) return;
-
-            await Task.Run(() => Directory.Delete(packToDelete.PackDirectory, true));
-
-            // If the deleted pack was a default pack, add it to the deleted list to prevent it from being restored on next launch.
             if (packToDelete.IsDefault)
             {
+                // For a default pack, don't delete files. Just add its name to the "deleted" list.
                 if (!CurrentSettings.DeletedDefaultPacks.Contains(packToDelete.DisplayName))
                 {
                     CurrentSettings.DeletedDefaultPacks.Add(packToDelete.DisplayName);
                     SaveSettings(CurrentSettings);
                 }
             }
+            else
+            {
+                // For a custom pack, delete the directory from AppData.
+                if (Directory.Exists(packToDelete.PackDirectory))
+                {
+                    await Task.Run(() => Directory.Delete(packToDelete.PackDirectory, true));
+                }
+            }
+        }
+
+        public void RestoreDefaultPacks()
+        {
+            CurrentSettings.DeletedDefaultPacks.Clear();
+            SaveSettings(CurrentSettings);
         }
 
         public SettingsModel LoadSettings()
@@ -290,27 +297,6 @@ namespace Mechanical_Keyboard.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ERROR] Failed to save settings: {ex.Message}");
-            }
-        }
-
-        // Helper method to copy directories
-        private static void CopyDirectory(string sourceDir, string destinationDir)
-        {
-            var dir = new DirectoryInfo(sourceDir);
-            if (!dir.Exists) return;
-
-            Directory.CreateDirectory(destinationDir);
-
-            foreach (FileInfo file in dir.GetFiles())
-            {
-                string targetFilePath = Path.Combine(destinationDir, file.Name);
-                file.CopyTo(targetFilePath);
-            }
-
-            foreach (DirectoryInfo subDir in dir.GetDirectories())
-            {
-                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                CopyDirectory(subDir.FullName, newDestinationDir);
             }
         }
     }

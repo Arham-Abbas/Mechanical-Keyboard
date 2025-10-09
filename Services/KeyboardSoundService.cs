@@ -60,10 +60,10 @@ namespace Mechanical_Keyboard.Services
 
         private unsafe delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-        public KeyboardSoundService(string soundPackDirectory)
+        public KeyboardSoundService(SoundPackInfo initialPack)
         {
             _proc = HookCallback;
-            LoadSoundPack(soundPackDirectory);
+            LoadSoundPack(initialPack);
 
             if (_soundMap.Count > 0)
             {
@@ -82,26 +82,23 @@ namespace Mechanical_Keyboard.Services
             }
             else
             {
-                // This constructor will now throw if initialization fails,
-                // so this else block is for safety but should not be hit.
-                throw new InvalidOperationException($"Audio engine could not be initialized because no sounds were loaded from '{soundPackDirectory}'.");
+                throw new InvalidOperationException($"Audio engine could not be initialized because no sounds were loaded from '{initialPack.PackDirectory}'.")
+                ;
             }
         }
 
-        public void ReloadSoundPack(string newSoundPackDirectory)
+        public void ReloadSoundPack(SoundPackInfo newPack)
         {
-            Debug.WriteLine($"Reloading sound pack from: {newSoundPackDirectory}");
-            // This is now a lightweight operation that only swaps out the sound data.
-            LoadSoundPack(newSoundPackDirectory);
+            Debug.WriteLine($"Reloading sound pack from: {newPack.PackDirectory}");
+            LoadSoundPack(newPack);
         }
 
-        private void LoadSoundPack(string directory)
+        private void LoadSoundPack(SoundPackInfo pack)
         {
             _soundMap.Clear();
-
-            var packInfo = App.SettingsService?.GetAvailableSoundPacks().FirstOrDefault(p => p.PackDirectory == directory);
-            // Default to true if pack info isn't found, preserving old behavior for safety.
-            bool hasPitchVariants = packInfo?.HasPitchVariants ?? true;
+            
+            var directory = pack.PackDirectory;
+            bool hasPitchVariants = pack.HasPitchVariants;
 
             var rawSounds = new Dictionary<string, CachedSound>();
             var soundNames = new[] { "key-press", "space-press", "enter-press", "backspace-press", "modifier-press" };
@@ -117,7 +114,6 @@ namespace Mechanical_Keyboard.Services
                     catch (Exception ex)
                     {
                         Debug.WriteLine($"[ERROR] Failed to load sound file '{filePath}': {ex.Message}");
-                        // If the essential key-press sound is corrupt, we must fail loudly.
                         if (name == "key-press")
                         {
                             throw new InvalidDataException($"The essential sound file '{filePath}' is corrupted or invalid.", ex);
@@ -135,7 +131,6 @@ namespace Mechanical_Keyboard.Services
                 throw new FileNotFoundException($"Could not load base 'key-press.wav' from '{directory}'. The sound pack is invalid.");
             }
 
-            // Use the loaded setting to determine the number of variants.
             var variantCount = hasPitchVariants ? 5 : 1;
             var standardKeyPool = new SoundVariantPool(baseSound, variantCount);
 
@@ -153,7 +148,7 @@ namespace Mechanical_Keyboard.Services
                 var keyCodes = mapping.Value;
                 
                 SoundVariantPool poolToUse = rawSounds.TryGetValue(soundName, out var specialSound) 
-                    ? new SoundVariantPool(specialSound, 1) // Special sounds never have variants
+                    ? new SoundVariantPool(specialSound, 1)
                     : standardKeyPool;
 
                 foreach (var vkCode in keyCodes)

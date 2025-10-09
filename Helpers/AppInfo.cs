@@ -17,13 +17,13 @@ namespace Mechanical_Keyboard.Helpers
             try
             {
                 var version = Package.Current.Id.Version;
-                // Format as Major.Minor.Build for user-friendliness
-                return $"{version.Major}.{version.Minor}.{version.Build}";
+                // Format as Major.Minor.Build.Revision for consistency
+                return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
             }
             catch
             {
                 // Fallback for when the app is not running in a packaged context
-                return "0.0.0 (Unpackaged)";
+                return "0.0.0.0 (Unpackaged)";
             }
         }
     }

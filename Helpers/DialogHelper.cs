@@ -89,17 +89,28 @@ namespace Mechanical_Keyboard.Helpers
                 return ContentDialogResult.None;
             }
 
+            var title = isDefault ? "Hide Default Pack" : "Delete Custom Pack";
+            var content = isDefault
+                ? $"Are you sure you want to hide the default '{packName}' pack? You can restore it later from the settings."
+                : $"Are you sure you want to permanently delete the '{packName}' sound pack? This action cannot be undone.";
+            var primaryButtonText = isDefault ? "Hide" : "Delete";
+
             var dialog = new ContentDialog
             {
-                Title = "Delete Sound Pack",
-                Content = isDefault
-                    ? $"Are you sure you want to delete the default sound pack '{packName}'? This can only be restored by an app update or reinstallation if you have 'Restore default packs' enabled."
-                    : $"Are you sure you want to permanently delete the '{packName}' sound pack?",
-                PrimaryButtonText = "Delete",
+                Title = title,
+                Content = content,
+                PrimaryButtonText = primaryButtonText,
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = rootElement.XamlRoot
             };
+
+            // Apply destructive styling for permanent deletion of custom packs
+            if (!isDefault)
+            {
+                dialog.PrimaryButtonStyle = (Style)Application.Current.Resources["AccentButtonStyle"];
+            }
+
             return await dialog.ShowAsync();
         }
 

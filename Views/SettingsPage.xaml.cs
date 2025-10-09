@@ -3,6 +3,7 @@ using Mechanical_Keyboard.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using System.Linq;
 
 namespace Mechanical_Keyboard.Views
 {
@@ -68,6 +69,15 @@ namespace Mechanical_Keyboard.Views
             if (sender is FrameworkElement button && button.DataContext is SoundPackInfo soundPack)
             {
                 ViewModel.PreviewSoundPackCommand.Execute(soundPack);
+            }
+        }
+
+        private void SoundPack_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Only process selection changes after the ViewModel is fully initialized.
+            if (ViewModel.IsInitialized && e.AddedItems.FirstOrDefault() is SoundPackInfo selectedPack)
+            {
+                ViewModel.OnSoundPackSelected(selectedPack);
             }
         }
     }
